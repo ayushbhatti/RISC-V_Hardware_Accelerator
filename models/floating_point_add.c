@@ -1,18 +1,43 @@
 #include "mex.h"
 //#define DEBUG_PRINTS
 
+// Floating-point bit mapping
 #define NUM_BITS 32
 #define EXP_BITS 8
 #define MANTISSA_BITS 23
 
+// Location of sign bit and exponent field
 #define SIGN_BIT (NUM_BITS - 1)
-#define EXP_BIT (SIGN_BIT - EXP_BITS)
+#define EXP_BIT  (SIGN_BIT - EXP_BITS)
 
-#define EXP_MASK ((1 << EXP_BITS) - 1)
+// Masks to extract exponent and mantissa fields
+#define EXP_MASK      ((1 << EXP_BITS) - 1)
 #define MANTISSA_MASK ((1 << MANTISSA_BITS) - 1)
+
+// Maximum exponent field
+#define MAX_EXP EXP_MASK
+
+// NaN bit-mapping
+#define NAN ((MAX_EXP << MANTISSA_BITS) | (1 << (MANTISSA_BITS - 2)))
+
+// Padded mantissa, +1 bit for sign, +1 bit for rounding
+#define PAD_WIDTH   (MANTISSA_BITS + 2)
+
+// Determine which bits to truncate when rounding
+// Should be padding + extra bits in pad
+#define TRUNC_WIDTH (PAD_WIDTH + 2)
+
+// Determine the round bit
+// 1 less than truncated bits
+#define ROUND_BIT   (TRUNC_WIDTH - 1)
+
+// Determine masking for rounding
+// Should select all bits below ROUND_BIT
+#define ROUND_MASK  ((1 << ROUND_BIT) - 1)
 
 float floating_point_add(float a, float b)
 {
+    // View the floating point numbers as uint32's
     unsigned int aUint32, bUint32;
     memcpy(&aUint32, &a, sizeof(float));
     memcpy(&bUint32, &b, sizeof(float));
@@ -23,6 +48,7 @@ float floating_point_add(float a, float b)
     mexPrintf("\n");
     #endif
 
+    // Extract the sign, exponent, and mantissa fields from the floating point numbers
     unsigned int aSign, bSign;
     unsigned int aExp, bExp;
     unsigned int aMantissa, bMantissa;
@@ -45,52 +71,66 @@ float floating_point_add(float a, float b)
     unsigned int sumUint32;
     float sum;
 
-    // Infinity and NaN's
-    if ((aExp == 255) || (bExp == 255))
+    // Handle Infinity and NaN inputs
+    if ((aExp == MAX_EXP) || (bExp == MAX_EXP))
     {
         // NaN
         if ((aMantissa != 0) || (bMantissa != 0))
         {
-            sumUint32 = 0x7FC00000;
+            sumUint32 = NAN;
         }
         // Infinity
         else
         {
-            if ((aExp == 255) && (bExp == 255) && (aSign != bSign))
+            // -Inf + Inf = NaN
+            if ((aExp == MAX_EXP) && (bExp == MAX_EXP) && (aSign != bSign))
             {
-                sumUint32 = 0x7FC00000;
+                sumUint32 = NAN;
             }
-            if (aExp == 255)
+            // a = +/- Inf, b = finite number
+            if (aExp == MAX_EXP)
             {
-                sumUint32 = (aSign << 31) | (0xFF << 23);
+                sumUint32 = (aSign << SIGN_BIT) | (MAX_EXP << EXP_BIT);
             }
+            // b = +/- Inf, a = finite number
             else
             {
-                sumUint32 = (bSign << 31) | (0xFF << 23);
+                sumUint32 = (bSign << SIGN_BIT) | (MAX_EXP << EXP_BIT);
             }
         }
+        
+        // View the uint32's as floats
         memcpy(&sum, &sumUint32, sizeof(float));
         return sum;
     }
 
+    // Normal floating point number
+    // 2^(exp - 127) * (1.fraction)
     if (aExp > 0)
     {
         aMantissa = aMantissa | (1 << MANTISSA_BITS);
     }
+    // Subnormal floating point number
+    // 2^(-126) * (0.fraction)
     else
     {
         aMantissa = aMantissa << 1;
     }
 
+    // Normal floating point number
+    // 2^(exp - 127) * (1.fraction)
     if (bExp > 0)
     {
         bMantissa = bMantissa | (1 << MANTISSA_BITS);
     }
+    // Subnormal floating point number
+    // 2^(-126) * (0.fraction)
     else
     {
         bMantissa = bMantissa << 1;
     }
 
+    // Create signed operands from mantissa's and sign bits
     long long aOperand = (long long) aMantissa;
     long long bOperand = (long long) bMantissa; 
 
@@ -110,6 +150,7 @@ float floating_point_add(float a, float b)
     mexPrintf("\n");
     #endif
 
+    // Determine the maximum exponents and corresponding operands
     unsigned int maxExp = aExp;
     unsigned int minExp = bExp;
     long long maxOperand = aOperand;
@@ -131,14 +172,15 @@ float floating_point_add(float a, float b)
     mexPrintf("\n");
     #endif
 
+    // Pack each operand into a common type with same exponent
     unsigned int expShift = maxExp - minExp;
-    if (expShift > 25)
+    if (expShift > PAD_WIDTH)
     {
-        expShift = 25;
+        expShift = PAD_WIDTH;
     }
 
-    maxOperand = maxOperand << 25;
-    minOperand = minOperand << (25 - expShift);
+    maxOperand = maxOperand << PAD_WIDTH;
+    minOperand = minOperand << (PAD_WIDTH - expShift);
 
     #ifdef DEBUG_PRINTS
     mexPrintf("maxOperand = 0x%016llX\n", maxOperand);
@@ -146,6 +188,7 @@ float floating_point_add(float a, float b)
     mexPrintf("\n");
     #endif
 
+    // Sum operand with common exponent
     long long sumOperand = maxOperand + minOperand;
 
     #ifdef DEBUG_PRINTS
@@ -153,6 +196,7 @@ float floating_point_add(float a, float b)
     mexPrintf("\n");
     #endif
 
+    // Make result unsigned and retain sign
     unsigned int sumSign = 0;
     if (sumOperand < 0)
     {
@@ -166,8 +210,9 @@ float floating_point_add(float a, float b)
     mexPrintf("\n");
     #endif
 
+    // Determine highest bit with '1'
     int maxBit = -1;
-    for (int i = 0; i < 51; ++i)
+    for (int i = 0; i <= (2*PAD_WIDTH); ++i)
     {
         if ((sumOperand >> i) & 1)
         {
@@ -180,10 +225,13 @@ float floating_point_add(float a, float b)
     mexPrintf("\n");
     #endif
 
+    // If result has non-zero "mantissa"
     if (maxBit > 0)
     {
+        // Determine shift to place significant bits in MSB
+        // Limit shift to handle subnormal results
         unsigned int maxShift = maxExp + 1;
-        unsigned int shift = 50 - (unsigned int) maxBit;
+        unsigned int shift = 2*PAD_WIDTH - (unsigned int) maxBit;
         if (shift > maxShift)
         {
             shift = maxShift;
@@ -195,6 +243,7 @@ float floating_point_add(float a, float b)
         mexPrintf("\n");
         #endif
 
+        // Shift operand so significant bits are in MSB
         sumOperand = sumOperand << shift;
 
         #ifdef DEBUG_PRINTS
@@ -205,11 +254,12 @@ float floating_point_add(float a, float b)
         mexPrintf("\n");
         #endif
 
+        // Determine rounding bit needed for convergent rounding
         long long roundBit = 0;
 
-        if (((sumOperand >> 26) & 1) == 1)
+        if (((sumOperand >> ROUND_BIT) & 1) == 1)
         {
-            if (((sumOperand & 0x3FFFFFF) != 0) || (((sumOperand >> 27) & 1) == 1))
+            if (((sumOperand & ROUND_MASK) != 0) || (((sumOperand >> TRUNC_WIDTH) & 1) == 1))
             {
                 roundBit = 1; 
             }
@@ -220,9 +270,10 @@ float floating_point_add(float a, float b)
         mexPrintf("\n");
         #endif
 
-        sumOperand = sumOperand >> 27;
+        // Round result
+        sumOperand = sumOperand >> TRUNC_WIDTH;
         sumOperand = sumOperand + roundBit;
-        if (((sumOperand >> 25) & 1) == 1)
+        if (((sumOperand >> PAD_WIDTH) & 1) == 1)
         {
             sumOperand = sumOperand >> 1;
             maxExp = maxExp + 1;
@@ -233,25 +284,28 @@ float floating_point_add(float a, float b)
         mexPrintf("\n");
         #endif
 
-        unsigned int sumMantissa = (unsigned int) (sumOperand & 0x7FFFFF);
+        // Determine mantissa 1.fraction for normal numbers and 0.fraction for subnormal numbers
+        unsigned int sumMantissa = (unsigned int) (sumOperand & MANTISSA_MASK);
 
         #ifdef DEBUG_PRINTS
         mexPrintf("sumMantissa = %08X\n", sumMantissa);
         mexPrintf("\n");
         #endif
 
-        int sumExpUnbounded = (int) maxExp + (maxBit - 48);
+        // Determine exponent must be between 0 and 255
+        int sumExpUnbounded = (int) maxExp + (maxBit - 2*(PAD_WIDTH-1));
         if (sumExpUnbounded < 0)
         {
             sumExpUnbounded = 0;
         }
-        else if (sumExpUnbounded > 255)
+        else if (sumExpUnbounded > MAX_EXP)
         {
-            sumExpUnbounded = 255;
+            sumExpUnbounded = MAX_EXP;
         }
         unsigned int sumExp = (unsigned int) sumExpUnbounded;
 
-        if (sumExp == 255)
+        // Handle infinite results
+        if (sumExp == MAX_EXP)
         {
             sumMantissa = 0;
         }
@@ -261,28 +315,23 @@ float floating_point_add(float a, float b)
         mexPrintf("\n");
         #endif
 
-        unsigned int sumUint32 = sumSign << 31 | sumExp << 23 | sumMantissa;
+        // Pack uint32 data into a float
+        unsigned int sumUint32 = sumSign << SIGN_BIT | sumExp << EXP_BIT | sumMantissa;
         float sum;
 
         memcpy(&sum, &sumUint32, sizeof(float));
 
         return sum;
     }
+    // Result has zero "mantissa"
     else
     {
         return 0.0f;
     }
-
-    // return a + b;
 }
 
 void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
 {
-    /*
-    mwSize numOfDims = mxGetNumberOfDimensions(prhs[0]);
-    mexPrintf("%d\n", numOfDims);
-    mwSize* dims = mxGetDimensions(prhs[0]);
-    */
     plhs[0] = mxCreateNumericArray(mxGetNumberOfDimensions(prhs[0]), 
         mxGetDimensions(prhs[0]), mxSINGLE_CLASS, mxREAL);
     mwSize numElements = mxGetNumberOfElements(prhs[0]);
@@ -293,19 +342,4 @@ void mexFunction(int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[])
     {
         sum[i] = floating_point_add(a[i], b[i]);
     }
-    /*
-    mwSize numElements = mxGetNumberOfElements(prhs);
-    for (mwSize i = 0; i < numOfDims; ++i)
-    {
-        // mexPrintf("%d\n",i);
-        mexPrintf("%d\n",dims[i]);
-    }*/
-    /*
-    const mwSize = 
-    const mwSize *mxGetDimensions(plhs[0]);
-
-    float a = mxGetprhs[0];
-    float b = *prhs[1];
-    float sum = a + b;
-    *plhs[0] = sum;*/
 }
