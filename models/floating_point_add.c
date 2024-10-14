@@ -24,8 +24,8 @@
 #define PAD_WIDTH   (MANTISSA_BITS + 2)
 
 // Determine which bits to truncate when rounding
-// Should be padding + extra bits in pad
-#define TRUNC_WIDTH (PAD_WIDTH + 2)
+// Should be padding + bit growth from add
+#define TRUNC_WIDTH (PAD_WIDTH + 1)
 
 // Determine the round bit
 // 1 less than truncated bits
@@ -212,7 +212,7 @@ float floating_point_add(float a, float b)
 
     // Determine highest bit with '1'
     int maxBit = -1;
-    for (int i = 0; i <= (2*PAD_WIDTH); ++i)
+    for (int i = 0; i < (2*PAD_WIDTH); ++i)
     {
         if ((sumOperand >> i) & 1)
         {
@@ -231,7 +231,7 @@ float floating_point_add(float a, float b)
         // Determine shift to place significant bits in MSB
         // Limit shift to handle subnormal results
         unsigned int maxShift = maxExp + 1;
-        unsigned int shift = 2*PAD_WIDTH - (unsigned int) maxBit;
+        unsigned int shift = 2*PAD_WIDTH - (unsigned int) maxBit - 1;
         if (shift > maxShift)
         {
             shift = maxShift;
