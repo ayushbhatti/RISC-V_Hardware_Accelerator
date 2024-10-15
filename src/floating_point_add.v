@@ -226,9 +226,9 @@ module floating_point_add (
         
         // Create 2's complement numbers
         if (aSignR) begin
-            aOperand2R <= -$signed({1'b0, aOperandR});
+            aOperand2R <= -$signed({2'b0, aOperandR});
         end else begin
-            aOperand2R <= $signed({1'b0, aOperandR});
+            aOperand2R <= $signed({2'b0, aOperandR});
         end
         
         if (bSignR) begin
@@ -255,7 +255,7 @@ module floating_point_add (
             minOperand3R <= bOperand2R;
         end else begin
             maxOperand3R <= bOperand2R;
-            minOperand3R <= bOperand2R;
+            minOperand3R <= aOperand2R;
         end
         
         /* Pipeline 4 */        
@@ -266,7 +266,7 @@ module floating_point_add (
         
         // Align both operands
         maxOperand4R <= maxOperand3R;
-        minOperand4R <= {minOperand3R, {PAD_WIDTH{1'b0}}} >>> expShift3R;
+        minOperand4R <= $signed({minOperand3R, {PAD_WIDTH{1'b0}}}) >>> expShift3R;
         
         /* Pipeline 5 */
         sumInf5R     <= sumInf4R;
@@ -275,7 +275,8 @@ module floating_point_add (
         maxExp5R     <= maxExp4R;
         
         // Sum both operands
-        sumOperandMsbVar = maxOperand4R + minOperand4R[(2*PAD_WIDTH-1):PAD_WIDTH];
+        sumOperandMsbVar = {maxOperand4R[PAD_WIDTH-1], maxOperand4R}
+            + {minOperand4R[2*PAD_WIDTH-1], minOperand4R[(2*PAD_WIDTH-1):PAD_WIDTH]};
         sumOperandLsbVar = minOperand4R[PAD_WIDTH-1:0];
         sumOperand5R <= {sumOperandMsbVar, sumOperandLsbVar};
         
@@ -337,7 +338,7 @@ module floating_point_add (
         sumSign9R    <= sumSign8R;
         
         // Determine resulting exponent
-        if (sumZero8R == 0) begin
+        if (sumZero8R == 1) begin
             sumExp9R <= 0;
         end else begin
             sumExp9R <= maxShift8R - sumShift8R;
