@@ -1,5 +1,5 @@
 % Number of random samples to generate
-N = 10000;
+N = 1000;
 
 % Random number generator seed
 rng(0)
@@ -22,6 +22,20 @@ c = cellfun(@(a,b)isEqual(a,b),num2cell(y),num2cell(z));
 
 % Determine if both are equal for all random samples
 all(c)
+
+% Save input data to a file
+fid = fopen("input.txt", "w");
+for i = 1:length(a)
+    fprintf(fid, "%08X %08X\n", typecast(a(i),'uint32'), typecast(b(i),'uint32'));
+end
+fclose(fid);
+
+% Save output data to a file
+fid = fopen("output.txt", "w");
+for i = 1:length(y)
+    fprintf(fid, "%08X\n", typecast(y(i),'uint32'));
+end
+fclose(fid);
 
 % Compare two floating point values
 function y = isEqual(a,b)
