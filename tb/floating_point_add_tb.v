@@ -14,6 +14,7 @@ module floating_point_add_tb;
     
     wire sumValid;
     wire [31:0] sum;
+    wire error;
     
     clk_gen #(.CLK_PERIOD(CLK_PERIOD)) clk_gen_i (.clkOut(clk));
     rst_gen #(.RESET_TIME(RESET_TIME)) rst_gen_i (.rstOut(rst));
@@ -38,6 +39,7 @@ module floating_point_add_tb;
         .clkIn(clk),
         .rstIn(rst),
         .validIn(sumValid),
-        .dataIn(sum));
+        .dataIn(sum),
+        .errorOut(error));
     
 endmodule
