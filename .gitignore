@@ -4,3 +4,5 @@
 *.gz
 *.bbl
 *.blg
+*.asv
+*.mexw64
