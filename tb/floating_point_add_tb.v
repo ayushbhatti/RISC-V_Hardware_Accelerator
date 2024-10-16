@@ -34,7 +34,7 @@ module floating_point_add_tb;
         .dataOut(sum),
         .validOut(sumValid));
     
-    compare_to_file comp (
+    file_checker check (
         .clkIn(clk),
         .rstIn(rst),
         .validIn(sumValid),

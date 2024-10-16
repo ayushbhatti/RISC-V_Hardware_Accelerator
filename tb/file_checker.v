@@ -1,4 +1,4 @@
-module compare_to_file (
+module file_checker (
     clkIn,
     rstIn,
     validIn,
