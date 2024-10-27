@@ -30,13 +30,13 @@ module floating_point_mult (
      validOut
 );
 
-    // Parameters for defining floating-point type
-    parameter FRAC_WIDTH = 23; // Mantissa width (+1 implicit bit)
+    
+    parameter FRAC_WIDTH = 23; // Mantissa width
     parameter EXP_WIDTH  = 8;  // Exponent width
     
     // Derived parameters
-    localparam DATA_WIDTH = FRAC_WIDTH + EXP_WIDTH + 1; // Sign + Mantissa + Exponent
-    localparam BIAS = (1 << (EXP_WIDTH - 1)) - 1; // Exponent bias
+    localparam DATA_WIDTH = FRAC_WIDTH + EXP_WIDTH + 1;
+    localparam BIAS = (1 << (EXP_WIDTH - 1)) - 1;
     input clkIn, rstIn;
     input [DATA_WIDTH-1:0] dataAIn;
     input [DATA_WIDTH-1:0] dataBIn;
@@ -45,22 +45,18 @@ module floating_point_mult (
     output reg [DATA_WIDTH-1:0] dataOut;
     output reg validOut;
     
-    // Input components
     wire aSign, bSign;
     wire [EXP_WIDTH-1:0] aExp, bExp;
     wire [FRAC_WIDTH:0] aMantissa, bMantissa;
 
-    // Output components
     reg resultSign;
     reg [EXP_WIDTH-1:0] resultExp;
     reg [FRAC_WIDTH:0] resultMantissa;
     
-    // Special cases handling
     wire aZero, bZero;
     wire aInf, bInf;
     wire aNaN, bNaN;
 
-    // Parse input floating point components
     assign aSign     = dataAIn[DATA_WIDTH-1];
     assign bSign     = dataBIn[DATA_WIDTH-1];
     assign aExp      = dataAIn[DATA_WIDTH-2:FRAC_WIDTH];
@@ -68,7 +64,6 @@ module floating_point_mult (
     assign aMantissa = {1'b1, dataAIn[FRAC_WIDTH-1:0]}; // Add implicit leading 1
     assign bMantissa = {1'b1, dataBIn[FRAC_WIDTH-1:0]}; // Add implicit leading 1
 
-    // Special cases detection
     assign aZero = (aExp == 0) && (dataAIn[FRAC_WIDTH-1:0] == 0);
     assign bZero = (bExp == 0) && (dataBIn[FRAC_WIDTH-1:0] == 0);
     assign aInf  = (aExp == {EXP_WIDTH{1'b1}}) && (dataAIn[FRAC_WIDTH-1:0] == 0);
@@ -76,7 +71,6 @@ module floating_point_mult (
     assign aNaN  = (aExp == {EXP_WIDTH{1'b1}}) && (dataAIn[FRAC_WIDTH-1:0] != 0);
     assign bNaN  = (bExp == {EXP_WIDTH{1'b1}}) && (dataBIn[FRAC_WIDTH-1:0] != 0);
 
-    // Intermediate results
     reg [2*FRAC_WIDTH+1:0] multMantissa;
     reg [EXP_WIDTH:0] sumExp;
 
