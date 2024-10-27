@@ -21,23 +21,30 @@
 
 
 module floating_point_mult (
-    input  clkIn,
-    input  rstIn,
-    input  [DATA_WIDTH-1:0] dataAIn,
-    input  [DATA_WIDTH-1:0] dataBIn,
-    input  validIn,
-    output reg [DATA_WIDTH-1:0] dataOut,
-    output reg validOut
+     clkIn,
+     rstIn,
+     dataAIn,
+     dataBIn,
+     validIn,
+     dataOut,
+     validOut
 );
 
     // Parameters for defining floating-point type
     parameter FRAC_WIDTH = 23; // Mantissa width (+1 implicit bit)
     parameter EXP_WIDTH  = 8;  // Exponent width
-
+    
     // Derived parameters
     localparam DATA_WIDTH = FRAC_WIDTH + EXP_WIDTH + 1; // Sign + Mantissa + Exponent
     localparam BIAS = (1 << (EXP_WIDTH - 1)) - 1; // Exponent bias
-
+    input clkIn, rstIn;
+    input [DATA_WIDTH-1:0] dataAIn;
+    input [DATA_WIDTH-1:0] dataBIn;
+    input validIn;
+    
+    output reg [DATA_WIDTH-1:0] dataOut;
+    output reg validOut;
+    
     // Input components
     wire aSign, bSign;
     wire [EXP_WIDTH-1:0] aExp, bExp;
