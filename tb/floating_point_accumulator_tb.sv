@@ -4,7 +4,7 @@ module floating_point_accumulator_tb;
 
     parameter CLK_PERIOD   = 10;
     parameter RESET_TIME   = 100;
-    parameter NUM_SAMPLES  = 16;
+    parameter MAX_SAMPLES  = 256;
     
     localparam INIT  = 0;
     localparam LOAD  = 1;
@@ -15,6 +15,7 @@ module floating_point_accumulator_tb;
     
     reg [1:0] stateR;
     
+    reg [31:0] numSampR;
     reg [31:0] dataR;
     reg [31:0] resultR;
     reg validR;
@@ -39,33 +40,39 @@ module floating_point_accumulator_tb;
         
     always @(posedge clk) begin
         if (rst) begin
-            stateR  <= INIT;
-            validR  <= 0;
-            startR  <= 0;
-            lastR   <= 0;
-            dataR   <= 0;
-            resultR <= 0;
+            stateR      <= INIT;
+            validR      <= 0;
+            startR      <= 0;
+            lastR       <= 0;
+            dataR       <= 0;
+            resultR     <= 0;
+            numSampR    <= 0;
         end else begin
             startR  <= 0;
             lastR   <= 0;
             case (stateR)
                 INIT : begin
-                    stateR  <= LOAD;
-                    validR  <= 1;
-                    startR  <= 1;
-                    dataR   <= $shortrealtobits(1.0);
-                    resultR <= $shortrealtobits(1.0);
-                    if (NUM_SAMPLES == 1) begin
-                        lastR   <= 1;
-                        stateR  <= CHECK;
+                    stateR      <= LOAD;
+                    validR      <= 1;
+                    startR      <= 1;
+                    dataR       <= $shortrealtobits(1.0);
+                    resultR     <= $shortrealtobits(1.0);
+                    if ($rtoi($bitstoshortreal(numSampR)) < MAX_SAMPLES) begin
+                        numSampR    <= $shortrealtobits($bitstoshortreal(numSampR) + 1.0);
                     end else begin
-                        stateR  <= LOAD;
+                        numSampR    <= $shortrealtobits(1.0);
+                    end
+                    if ((numSampR == 0) || ($rtoi($bitstoshortreal(numSampR)) == MAX_SAMPLES)) begin
+                        lastR       <= 1;
+                        stateR      <= CHECK;
+                    end else begin
+                        stateR      <= LOAD;
                     end
                 end
                 LOAD : begin
                     resultR <= $shortrealtobits($bitstoshortreal(resultR) + ($bitstoshortreal(dataR) + 1.0));
                     dataR   <= $shortrealtobits($bitstoshortreal(dataR) + 1.0);
-                    if ($rtoi($bitstoshortreal(dataR)) == (NUM_SAMPLES - 1)) begin
+                    if ($rtoi($bitstoshortreal(dataR)) == ($rtoi($bitstoshortreal(numSampR)) - 1)) begin
                         lastR   <= 1;
                         stateR  <= CHECK;
                     end
