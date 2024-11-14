@@ -4,7 +4,9 @@ module floating_point_accumulate (
     startIn,
     lastIn,
     validIn,
-    dataIn);
+    dataIn,
+    validOut,
+    dataOut);
     
     // Parameters to define floating-point type
     parameter FRAC_WIDTH      = 24;
@@ -51,57 +53,61 @@ module floating_point_accumulate (
             wire [1:0] iDelay;
             wire [1:0] oDelay;
             
-            generate
-                if (i == 0) begin
-                    assign stageIData [i] = dataIn;
-                    assign stageIValid[i] = validIn;
-                    assign stageIStart[i] = startIn;
-                    assign stageILast [i] = lastIn;
-                else
-                    assign stageIData [i] = stageOData [i-1];
-                    assign stageIValid[i] = stageOValid[i-1];
-                    assign stageIStart[i] = stageOStart[i-1];
-                    assign stageILast [i] = stageOLast [i-1];
-                end
-            endgenerate
+            /*assign stageIData [i] = dataIn; // (i == 0) ? dataIn  : stageOData [i-1];
+            assign stageIValid[i] = validIn; // (i == 0) ? validIn : stageOValid[i-1];
+            assign stageIStart[i] = startIn; // (i == 0) ? startIn : stageOStart[i-1];
+            assign stageILast [i] = lastIn; //(i == 0) ? lastIn  : stageOLast [i-1];*/
+            
+            if (i == 0) begin
+                assign stageIData [i] = dataIn;
+                assign stageIValid[i] = validIn;
+                assign stageIStart[i] = startIn;
+                assign stageILast [i] = lastIn;
+            end else begin
+                assign stageIData [i] = stageOData [i-1];
+                assign stageIValid[i] = stageOValid[i-1];
+                assign stageIStart[i] = stageOStart[i-1];
+                assign stageILast [i] = stageOLast [i-1];
+            end
                 
             always @(posedge clkIn) begin
                 if (rstIn) begin
                     validR <= 0;
                 end else begin
-                    validR <= stageIValid[i] & !validR;
+                    if (stageIValid[i]) begin
+                        validR <= !validR;
+                    end
                 end
             end
             
             assign valid = stageIValid[i] & validR;
             
             always @(posedge clkIn) begin
-            
                 if (stageIValid[i]) begin
                     dataR   <= stageIData[i];
                     startR  <= stageIStart[i];
                 end
-                
-                floating_point_add #(.FRAC_WIDTH(FRAC_WIDTH), .EXP_WIDTH(EXP_WIDTH)) add_i (
-                    .clkIn(clkIn),
-                    .rstIn(rstIn),
-                    .dataAIn(stageIData[i]),
-                    .dataBIn(dataR),
-                    .validIn(valid),
-                    .dataOut(stageOData[i]),
-                    .validOut(stageOValid[i]));
-                    
-                assign iDelay = {startR, stageILast[i]};
-                
-                delay #(.DATA_WIDTH(2), .LATENCY(ADD_LATENCY)) delay_i (
-                    .clkIn(clkIn),
-                    .rstIn(rstIn),
-                    .dataIn(iDelay),
-                    .dataOut(oDelay));
-                    
-                assign stageOStart[i] <= oDelay[1];
-                assign stageOLast [i] <= oDelay[0];
             end
+                
+            floating_point_add #(.FRAC_WIDTH(FRAC_WIDTH), .EXP_WIDTH(EXP_WIDTH)) add_i (
+                .clkIn(clkIn),
+                .rstIn(rstIn),
+                .dataAIn(stageIData[i]),
+                .dataBIn(dataR),
+                .validIn(valid),
+                .dataOut(stageOData[i]),
+                .validOut(stageOValid[i]));
+                
+            assign iDelay = {startR, stageILast[i]};
+            
+            delay #(.DATA_WIDTH(2), .LATENCY(ADD_LATENCY)) delay_i (
+                .clkIn(clkIn),
+                .rstIn(rstIn),
+                .dataIn(iDelay),
+                .dataOut(oDelay));
+                    
+            assign stageOStart[i] = oDelay[1];
+            assign stageOLast [i] = oDelay[0];
         end
     endgenerate
     
@@ -124,7 +130,6 @@ module floating_point_accumulate (
             accumDataBR <= accumData;
         end
     end
-    assign dataBIn = stageOStart[NUM_STAGES-1] ? 0 : 
     
     floating_point_add #(.FRAC_WIDTH(FRAC_WIDTH), .EXP_WIDTH(EXP_WIDTH)) accum_i (
         .clkIn(clkIn),
@@ -144,4 +149,4 @@ module floating_point_accumulate (
     assign validOut = accumValid & accumLast;
     assign dataOut  = accumData;
                     
-endmodule;
+endmodule
