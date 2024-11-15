@@ -40,7 +40,7 @@ module floating_point_accumulator_tb;
     rst_gen #(.RESET_TIME(RESET_TIME)) rst_gen_i (.rstOut(rst));
     
     // Include accumulator
-    accumulator accum_i (
+    floating_point_accumulator #(.EXP_WIDTH(EXP_WIDTH), .FRAC_WIDTH(FRAC_WIDTH)) accum_i (
         .clkIn(clk),
         .rstIn(rst),
         .lastIn(lastR),
