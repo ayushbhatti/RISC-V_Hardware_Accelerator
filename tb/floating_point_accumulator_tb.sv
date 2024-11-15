@@ -28,10 +28,9 @@ module floating_point_accumulator_tb;
     clk_gen #(.CLK_PERIOD(CLK_PERIOD)) clk_gen_i (.clkOut(clk));
     rst_gen #(.RESET_TIME(RESET_TIME)) rst_gen_i (.rstOut(rst));
     
-    floating_point_accumulate accum_i (
+    accumulator accum_i (
         .clkIn(clk),
         .rstIn(rst),
-        .startIn(startR),
         .lastIn(lastR),
         .validIn(validR),
         .dataIn(dataR),
