@@ -1,26 +1,6 @@
-`timescale 1ns / 1ps
-//////////////////////////////////////////////////////////////////////////////////
-// Company:
-// Engineer:
-//
-// Create Date: 10/20/2024 08:17:15 AM
-// Design Name:
-// Module Name: floating_mult
-// Project Name:
-// Target Devices:
-// Tool Versions:
-// Description:
-//
-// Dependencies:
-//
-// Revision:
-// Revision 0.01 - File Created
-// Additional Comments:
-//
-//////////////////////////////////////////////////////////////////////////////////
+`timescale 1ns / 1ns
 
-
-module floating_point_mult (
+module floating_point_multiply (
      clkIn,
      rstIn,
      dataAIn,
