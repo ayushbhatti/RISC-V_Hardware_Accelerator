@@ -14,8 +14,14 @@
 #define EXP_MASK      ((1 << EXP_BITS) - 1)
 #define MANTISSA_MASK ((1 << MANTISSA_BITS) - 1)
 
+// Maximum exponent field
+#define MAX_EXP EXP_MASK
+
+// Floating point Bias
 #define BIAS ((1 << (EXP_BITS - 1)) - 1)
-#define PROD_WIDTH (2 * (MANTISSA_BITS + 1) - 1)
+
+// Mantissa product width
+#define PROD_WIDTH (2 * (MANTISSA_BITS + 1))
 
 float floating_point_multiply(float a, float b)
 {
@@ -54,7 +60,7 @@ float floating_point_multiply(float a, float b)
     unsigned int bNaN = 0;
     unsigned int aInf = 0;
     unsigned int bInf = 0;
-    if (aExp == 255)
+    if (aExp == MAX_EXP)
     {
         if (aMantissa == 0)
         {
@@ -65,7 +71,7 @@ float floating_point_multiply(float a, float b)
             aNaN = 1;
         }
     }
-    if (bExp == 255)
+    if (bExp == MAX_EXP)
     {
         if (bMantissa == 0)
         {
@@ -84,11 +90,11 @@ float floating_point_multiply(float a, float b)
     unsigned int aZero = 0;
     unsigned int bZero = 0;
 
-    if (aExp == 0 && aMantissa==0)
+    if (aExp == 0 && aMantissa == 0)
     {
         aZero = 1;
     }
-    if (bExp == 0 && bMantissa==0)
+    if (bExp == 0 && bMantissa == 0)
     {
         bZero = 1;
     }
@@ -141,11 +147,11 @@ float floating_point_multiply(float a, float b)
     // Determine shift required to place make MSB '1'
     int prodShift = 0;
     unsigned int i;
-    for (i = 0; i < 48; ++i)
+    for (i = 0; i < PROD_WIDTH; ++i)
     {
         if ((prod >> i) & 1)
         {
-            prodShift = 47 - i;
+            prodShift = (PROD_WIDTH - 1) - i;
         }
     }
 
@@ -216,9 +222,9 @@ float floating_point_multiply(float a, float b)
 
     // Determine round bit for convergent round
     unsigned int roundBit = 0;
-    if ((truncBits >> 48) & 1)
+    if ((truncBits >> PROD_WIDTH) & 1)
     {
-        unsigned long long mask = ((((unsigned long long) 1) << 48) - 1);
+        unsigned long long mask = ((((unsigned long long) 1) << PROD_WIDTH) - 1);
 
         #ifdef DEBUG_PRINT
             printf("mask = 0x%016llX\n\n", mask);
@@ -241,28 +247,28 @@ float floating_point_multiply(float a, float b)
     // Determine if exponent is updated by round
     if (prodShift == 0)
     {
-        if ((prodMantissa >> 24) && 1)
+        if ((prodMantissa >> (MANTISSA_BITS + 1)) && 1)
         {
             prodExp++;
         }
     }
     else
     {
-        if ((prodMantissa >> 23) && 1)
+        if ((prodMantissa >> MANTISSA_BITS) && 1)
         {
             prodExp++;
         }
     }
 
     // Mask out resulting mantissa
-    prodMantissa = prodMantissa & ((1 << 23) - 1);
+    prodMantissa = prodMantissa & MANTISSA_MASK;
 
     #ifdef DEBUG_PRINT
         printf("prodExp = %d\n\n", prodExp);
     #endif
 
     // Determine if the result is infinity
-    if (prodExp >= 255)
+    if (prodExp >= MAX_EXP)
     {
         prodInf = 1;
     }
@@ -270,17 +276,17 @@ float floating_point_multiply(float a, float b)
     // Handle special cases
     if (prodNaN)
     {
-        prodExp = 0xFF;
+        prodExp = MAX_EXP;
         prodMantissa = 1 << (MANTISSA_BITS - 1);
     }
     else if (prodInf)
     {
-        prodExp = 0xFF;
+        prodExp = MAX_EXP;
         prodMantissa = 0;
     }
     
     // Pack result
-    unsigned int prodUint32 = (prodSign << 31) | (prodExp << 23) | prodMantissa;
+    unsigned int prodUint32 = (prodSign << SIGN_BIT) | (prodExp << EXP_BIT) | prodMantissa;
     
     // Copy into floating point result
     float prodFloat;
