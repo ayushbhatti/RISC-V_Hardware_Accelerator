@@ -209,12 +209,12 @@ float floating_point_multiply(float a, float b)
     }
 
     // Determine bits shifted from mantissa
-    unsigned long long truncBits = prod << 15; 
-    truncBits = truncBits << (25 - prodShift);
-    truncBits = truncBits >> 15;
+    unsigned long long truncBits = prod << (64 - PROD_WIDTH - 1); 
+    truncBits = truncBits << (MANTISSA_BITS + 2 - prodShift);
+    truncBits = truncBits >> (64 - PROD_WIDTH - 1);
 
     // Determine mantissa
-    unsigned int prodMantissa = prod >> (24 + prodShift);
+    unsigned int prodMantissa = prod >> (MANTISSA_BITS + 1 + prodShift);
 
     #ifdef DEBUG_PRINT
         printf("prodMantissa = 0x%018X\n\n", prodMantissa);

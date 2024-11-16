@@ -1,5 +1,5 @@
 % Number of random samples to generate
-N = 1000000;
+N = 1000;
 
 % Random number generator seed
 rng(0)
