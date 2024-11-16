@@ -11,9 +11,6 @@ b = uint32(randi([0 2^32-1], N, 1));
 a = typecast(a,'single');
 b = typecast(b,'single');
 
-% a = a(22200);
-% b = b(22200);
-
 % Reference multiply
 y = a .* b;
 
