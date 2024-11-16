@@ -17,12 +17,16 @@ module floating_point_multiply_tb;
     clk_gen #(.CLK_PERIOD(CLK_PERIOD)) clk_gen_i (.clkOut(clk));
     rst_gen #(.RESET_TIME(RESET_TIME)) rst_gen_i (.rstOut(rst));
     
-    file_driver driver (
+    file_driver #(.FILE_NAME("input_a.txt")) driver_a (
         .clkIn(clk),
         .rstIn(rst),
-        .dataAOut(dataA),
-        .dataBOut(dataB),
+        .dataOut(dataA),
         .validOut(valid));
+        
+    file_driver #(.FILE_NAME("input_b.txt")) driver_b (
+        .clkIn(clk),
+        .rstIn(rst),
+        .dataOut(dataB));
     
     floating_point_multiply mult (
         .clkIn(clk),
