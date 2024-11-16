@@ -134,8 +134,6 @@ float floating_point_multiply(float a, float b)
 
     unsigned int prodSign = aSign ^ bSign;
 
-    // int prodShift = (int) aShift + (int) bShift;
-
     #ifdef DEBUG_PRINT
         printf("aShift = %d\n", aShift);
         printf("bShift = %d\n", bShift);
@@ -249,54 +247,6 @@ float floating_point_multiply(float a, float b)
     {
         prodInf = 1;
     }
-    
-    /*#ifdef DEBUG_PRINT
-        printf("prodShift = %d\n\n", prodShift);
-    #endif
-
-    if (prodShift >= 0)
-    {
-        #ifdef DEBUG_PRINT
-            printf("shift left!\n");
-        #endif
-        prod = prod << prodShift;
-    }
-    else
-    {
-        #ifdef DEBUG_PRINT
-            printf("shift right!\n");
-        #endif
-        int shift = -prodShift;
-        #ifdef DEBUG_PRINT
-            printf("shift = %d\n", shift);
-        #endif
-        if (shift > 48)
-        {
-            shift = 48;
-        }
-        prod = prod >> shift;
-    }
-
-    #ifdef DEBUG_PRINT
-        printf("prod = 0x%016llX\n\n", prod);
-    #endif
-
-    if (prodExp >= 255)
-    {
-        prodInf = 1;
-    }
-
-    unsigned int prodMantissa = (unsigned int) (prod >> 24) & MANTISSA_MASK;
-
-    unsigned int roundBit = 0;
-    if (prod & (1 << 23))
-    {
-        if (((prod >> 24) & 1) || (prod & ((1 << 23)-1)))
-        {
-            roundBit = 1;
-        }
-    }
-    prodMantissa = prodMantissa + roundBit;*/
 
     if (prodNaN)
     {
