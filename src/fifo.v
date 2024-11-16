@@ -32,7 +32,7 @@ module fifo (
     wire wrEn;
     wire rdEn;
 
-    assign wrEn = wrValidIn & !fullR;
+    assign wrEn = wrValidIn & (!fullR | rdEn);
     assign rdEn = rdReadyIn & rdValidR;
 
     always @(posedge clkIn) begin
@@ -84,7 +84,7 @@ module fifo (
                 rdAddrR         <= rdAddrR + 1;
             end
 
-            if (wrValidIn && fullR) begin
+            if (wrValidIn && fullR && !rdEn) begin
                 $error("Fifo overflow detected at time %t", $realtime);
             end
         end
