@@ -8,7 +8,7 @@ module multiply_and_accumulate (
     validIn,
     lastIn,
     dataOut,
-    validOut)
+    validOut);
     
     // Parameters to define floating-point type
     parameter FRAC_WIDTH    = 24;
@@ -21,7 +21,7 @@ module multiply_and_accumulate (
     localparam DATA_WIDTH   = FRAC_WIDTH + EXP_WIDTH;
     
     // Latency of Submodules
-    localparam ADD_LATENECY = 13;
+    localparam ADD_LATENCY  = 13;
     localparam MULT_LATENCY = 10;
     
     // Number of stages
@@ -65,7 +65,7 @@ module multiply_and_accumulate (
             assign dataB = dataBIn[(i*DATA_WIDTH) +: DATA_WIDTH];
             
             // Elementwise multiplication
-            floating_point_mult #(.FRAC_WIDTH(FRAC_WIDTH), .EXP_WIDTH(EXP_WIDTH)) mult_j (
+            floating_point_multiply #(.FRAC_WIDTH(FRAC_WIDTH), .EXP_WIDTH(EXP_WIDTH)) mult_j (
                 .clkIn(clkIn),
                 .rstIn(rstIn),
                 .dataAIn(dataA),
@@ -90,17 +90,17 @@ module multiply_and_accumulate (
             localparam NUM_ADDS = VECTOR_SIZE/(2**(i+1));
             
             if (i == 0) begin
-                stageILast[i] = multLast;
+                assign stageILast[i] = multLast;
                 for (j = 0; j < VECTOR_SIZE; j = j + 1) begin
-                    stageIData[i][j] = multData[j];
-                    stageIValid[i][j] = multValid[j];
+                    assign stageIData[i][j] = multData[j];
+                    assign stageIValid[i][j] = multValid[j];
                 end
                 
             end else begin
-                stageILast[i] = stageOLast[i-1];
+                assign stageILast[i] = stageOLast[i-1];
                 for (j = 0; j < VECTOR_SIZE; j = j + 1) begin
-                    stageIData[i][j] = stageOData[i-1][j];
-                    stageIValid[i][j] = stageOValid[i-1][j];
+                    assign stageIData[i][j] = stageOData[i-1][j];
+                    assign stageIValid[i][j] = stageOValid[i-1][j];
                 end
             end
             
@@ -126,8 +126,8 @@ module multiply_and_accumulate (
                         .validOut(stageOValid[i][j]));
                         
                 end else begin
-                    stageOData[i][j] = 0;
-                    stageOValid[i][j] = 0;
+                    assign stageOData[i][j] = 0;
+                    assign stageOValid[i][j] = 0;
                 end
             end
             
