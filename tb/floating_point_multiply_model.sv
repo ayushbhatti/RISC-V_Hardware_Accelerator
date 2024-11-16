@@ -1,4 +1,4 @@
-module floating_point_multiply(
+module floating_point_multiply_model (
     clkIn,
     rstIn,
     dataAIn,
