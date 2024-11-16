@@ -1,5 +1,5 @@
 #include "mex.h"
-//#define DEBUG_PRINTS
+// #define DEBUG_PRINTS
 
 // Floating-point bit mapping
 #define NUM_BITS 32
