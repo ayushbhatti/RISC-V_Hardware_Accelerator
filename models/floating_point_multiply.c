@@ -1,5 +1,5 @@
 #include "mex.h"
-//#define DEBUG_PRINT
+// #define DEBUG_PRINT
 
 // Floating-point bit mapping
 #define NUM_BITS 32
@@ -157,6 +157,12 @@ float floating_point_multiply(float a, float b)
     // Compute exponent of result
     // Adding 1 to account for shift by 1 in output data
     int prodExp = (int) aExp + (int) bExp - BIAS + 1;
+
+    // Force exponent to zero for zero products
+    if (aZero || bZero)
+    {
+        prodExp = 0;
+    }
 
     #ifdef DEBUG_PRINT
         printf("prodExp = %d\n\n", prodExp);
