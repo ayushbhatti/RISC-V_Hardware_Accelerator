@@ -49,6 +49,7 @@ float floating_point_multiply(float a, float b)
         printf("bMantissa = 0x%08X\n\n", bMantissa);
     #endif
     
+    // Determine if either of the inputs are infinity or NaN
     unsigned int aNaN = 0;
     unsigned int bNaN = 0;
     unsigned int aInf = 0;
@@ -76,8 +77,10 @@ float floating_point_multiply(float a, float b)
         }
     }
 
+    // Product is NaN if either input is NaN
     unsigned int prodNaN = aNaN | bNaN;
 
+    // Determine if either input is zero
     unsigned int aZero = 0;
     unsigned int bZero = 0;
 
@@ -90,9 +93,21 @@ float floating_point_multiply(float a, float b)
         bZero = 1;
     }
 
+    // Product is NaN if one operand is Inf and the other is zero
     prodNaN = prodNaN | (aInf & bZero) | (bInf & aZero);
+
+    // Determine if the product is Inf. NaN takes precedence over Inf
+    // in final if statement so this can be 1 even if prodNaN = 1
     unsigned int prodInf = aInf | bInf;
 
+    // Add implicit leading 1's for normal floating point numbers
+    // Shift by 1 for subnormal floating point numbers
+
+    // For normal floating point number:
+    // 2^(exp - 127) * (1.fraction)
+
+    // For subnormal floating point number
+    // 2^(-126) * (0.fraction)
     if (aExp != 0)
     {
         aMantissa = aMantissa | (1 << MANTISSA_BITS);
@@ -116,39 +131,21 @@ float floating_point_multiply(float a, float b)
         printf("bMantissa = 0x%08X\n\n", bMantissa);
     #endif
 
-    unsigned int aShift = 0;
-    unsigned int bShift = 0;
-
-    unsigned int i;
-    for (i = 0; i <= MANTISSA_BITS; ++i)
-    {
-        if ((aMantissa >> i) & 1)
-        {
-            aShift = (MANTISSA_BITS - i);
-        }
-        if ((bMantissa >> i) & 1)
-        {
-            bShift = (MANTISSA_BITS - i);
-        }
-    }
-
+    // Determine signal of result
     unsigned int prodSign = aSign ^ bSign;
 
-    #ifdef DEBUG_PRINT
-        printf("aShift = %d\n", aShift);
-        printf("bShift = %d\n", bShift);
-    #endif
+    // Multiply mantissas
+    unsigned long long prod = ((unsigned long long) aMantissa) * 
+        ((unsigned long long) bMantissa);
 
-    unsigned long long prod = (unsigned long long) ((unsigned long long) aMantissa) * ((unsigned long long) bMantissa);
-
+    // Determine shift required to place make MSB '1'
     int prodShift = 0;
-    int prodZero = 1;
+    unsigned int i;
     for (i = 0; i < 48; ++i)
     {
         if ((prod >> i) & 1)
         {
             prodShift = 47 - i;
-            prodZero = 0;
         }
     }
 
@@ -157,19 +154,26 @@ float floating_point_multiply(float a, float b)
         printf("prodShift = %d\n\n", prodShift);
     #endif
 
+    // Compute exponent of result
+    // Adding 1 to account for shift by 1 in output data
     int prodExp = (int) aExp + (int) bExp - BIAS + 1;
 
     #ifdef DEBUG_PRINT
         printf("prodExp = %d\n\n", prodExp);
     #endif
 
+    // Place '1' in MSB
     prod = prod << prodShift;
+
+    // Determine resulting exponent
     prodExp = prodExp - prodShift;
 
     #ifdef DEBUG_PRINT
         printf("prodExp = %d\n\n", prodExp);
     #endif
 
+    // Determine shift required to make exponent positive
+    // Need a maximum value of 25 so no significant bits result from round.
     if (prodExp > 0)
     {
         prodShift = 0;
@@ -186,29 +190,34 @@ float floating_point_multiply(float a, float b)
         }
     }
 
+    // Clamp exponent at zero
     if (prodExp < 0)
     {
         prodExp = 0;
     }
 
+    // Determine bits shifted from mantissa
     unsigned long long truncBits = prod << 15; 
     truncBits = truncBits << (25 - prodShift);
     truncBits = truncBits >> 15;
 
+    // Determine mantissa
     unsigned int prodMantissa = prod >> (24 + prodShift);
 
     #ifdef DEBUG_PRINT
         printf("prodMantissa = 0x%018X\n\n", prodMantissa);
     #endif
 
+    // Determine round bit for convergent round
     unsigned int roundBit = 0;
     if ((truncBits >> 48) & 1)
     {
         unsigned long long mask = ((((unsigned long long) 1) << 48) - 1);
+
         #ifdef DEBUG_PRINT
             printf("mask = 0x%016llX\n\n", mask);
-            printf("(prodMantissa & 1) = %d\n\n", (prodMantissa & 1));
         #endif
+
         if ((prodMantissa & 1) || (truncBits & mask))
         {
             roundBit = 1;
@@ -220,8 +229,10 @@ float floating_point_multiply(float a, float b)
         printf("roundBit = %d\n\n", roundBit);
     #endif
 
+    // Round result
     prodMantissa = prodMantissa + roundBit;
 
+    // Determine if exponent is updated by round
     if (prodShift == 0)
     {
         if ((prodMantissa >> 24) && 1)
@@ -237,17 +248,20 @@ float floating_point_multiply(float a, float b)
         }
     }
 
+    // Mask out resulting mantissa
     prodMantissa = prodMantissa & ((1 << 23) - 1);
 
     #ifdef DEBUG_PRINT
         printf("prodExp = %d\n\n", prodExp);
     #endif
 
+    // Determine if the result is infinity
     if (prodExp >= 255)
     {
         prodInf = 1;
     }
 
+    // Handle special cases
     if (prodNaN)
     {
         prodExp = 0xFF;
@@ -259,9 +273,11 @@ float floating_point_multiply(float a, float b)
         prodMantissa = 0;
     }
     
+    // Pack result
     unsigned int prodUint32 = (prodSign << 31) | (prodExp << 23) | prodMantissa;
+    
+    // Copy into floating point result
     float prodFloat;
-
     memcpy(&prodFloat, &prodUint32, sizeof(float));
 
     return prodFloat;
