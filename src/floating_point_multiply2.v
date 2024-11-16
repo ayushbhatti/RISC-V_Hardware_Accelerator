@@ -28,6 +28,9 @@ module floating_point_multiply (
     // Maximum exponent value
     localparam MAX_EXP          = 2**EXP_WIDTH - 1;
 
+    // Define mutliplier bias
+    localparam BIAS             = 2**(EXP_WIDTH - 1) - 1;
+    
     // Determine sizes of partial products
     localparam PRODA_IN_WIDTH   = FRAC_WIDTH/2;
     localparam PRODB_IN_WIDTH   = FRAC_WIDTH - PRODA_IN_WIDTH;
@@ -60,10 +63,6 @@ module floating_point_multiply (
 
     output [DATA_WIDTH-1:0] dataOut;
     output validOut;
-
-    wire aSign, bSign;
-    wire [EXP_WIDTH-1:0] aExp, bExp;
-    wire [MANTISSA_WIDTH-1:0] aMantissa, bMantissa;
 
     // Pipeline #1
     reg aInfR, bInfR;
@@ -109,7 +108,7 @@ module floating_point_multiply (
     reg prodInf5R;
     reg prodNaN5R;
 
-    reg signed [EXP_WIDTH+2:0] prodExp5R
+    reg signed [EXP_WIDTH+2:0] prodExp5R;
 
     reg [PROD_WIDTH-1:0] prod5R;
 
@@ -159,8 +158,8 @@ module floating_point_multiply (
 
     // Pipeline #10
     reg prodSign10R;
-    reg [MANTISSA_WIDTH-1:0] prodMantissa9R;
-    reg [EXP_WIDTH-1:0] prodExp9R;
+    reg [MANTISSA_WIDTH-1:0] prodMantissa10R;
+    reg [EXP_WIDTH-1:0] prodExp10R;
 
     // Valid Pipeline
     reg [LATENCY-1:0] validR;
@@ -169,6 +168,8 @@ module floating_point_multiply (
     wire [EXP_WIDTH-1:0] aExp, bExp;
     wire [MANTISSA_WIDTH-1:0] aMantissa, bMantissa;
 
+    integer i;
+    
     // Parse Portions of Floating Point Number
     assign aSign = dataAIn[SIGN_IDX];
     assign bSign = dataBIn[SIGN_IDX];
@@ -245,14 +246,14 @@ module floating_point_multiply (
         // Determine if product is infinity or NaN
         // Note that NaN takes precedence over infinity when determining result
         prodInf2R       <= aInfR | bInfR;
-        prodNaN2R       <= aNaNR | bNaNR | (aInfR & aZeroR) | (bInfR & bZeroR);
+        prodNaN2R       <= aNaNR | bNaNR | (aInfR & bZeroR) | (bInfR & aZeroR);
 
         // Compute exponent
         prodExp2R       <= prodExpR - (BIAS - 1);
 
         // Compute partial products
         prodA2R         <= aOperandR * bOperandR[PRODA_IN_HI:PRODA_IN_LO];
-        prodB2R         <= bOperandR * bOperandR[PRODB_IN_HI:PRODB_IN_LO];
+        prodB2R         <= aOperandR * bOperandR[PRODB_IN_HI:PRODB_IN_LO];
 
         /* Pipeline #3 */
         prodSign3R      <= prodSign2R;
@@ -266,7 +267,7 @@ module floating_point_multiply (
             prodExp3R   <= prodExp2R;
         end
 
-        prod3R          <= {prodA2R, PRODA_IN_WIDTH{1'b0}} + prodB2R;
+        prod3R          <= prodA2R + {prodB2R, {PRODA_IN_WIDTH{1'b0}}};
 
         /* Pipeline #4 */
         prodSign4R      <= prodSign3R;
@@ -277,7 +278,7 @@ module floating_point_multiply (
 
         // Determine highest active bit of product
         prodShift4R     <= 0;
-        for (i = 0; i < PROD_WIDTH; ++i) begin
+        for (i = 0; i < PROD_WIDTH; i = i + 1) begin
             if (prod3R[i]) begin
                 prodShift4R     <= ((PROD_WIDTH - 1) - i);
             end
@@ -288,7 +289,7 @@ module floating_point_multiply (
         prodInf5R       <= prodInf4R;
         prodNaN5R       <= prodNaN4R;
         prod5R          <= prod4R << prodShift4R;
-        prodExp5R       <= prodExp4R - prodShift4R;
+        prodExp5R       <= prodExp4R - $signed(prodShift4R);
 
         /* Pipeline #6 */
         prodSign6R      <= prodSign5R;
@@ -301,11 +302,11 @@ module floating_point_multiply (
         if (prodExp5R > 0) begin
             prodExp6R   <= prodExp5R;
             prodShift6R <= 0;
-        else begin
+        end else begin
             prodExp6R   <= 0;
             if (prodExp5R < -FRAC_WIDTH) begin
                 prodShift6R <= MAX_R_SHIFT;
-            else begin
+            end else begin
                 prodShift6R <= -prodExp5R + 1;
             end
         end
@@ -314,19 +315,19 @@ module floating_point_multiply (
         prodSign7R      <= prodSign6R;
         prodInf7R       <= prodInf6R;
         prodNaN7R       <= prodNaN6R;
-        prod7R          <= {prod6R, MAX_R_SHIFT{1'b0}} >> prodShift6R;
+        prod7R          <= {prod6R, {MAX_R_SHIFT{1'b0}}} >> prodShift6R;
 
         // Clamp exponent
         if (prodExp6R > MAX_EXP) begin
             prodExp7R   <= MAX_EXP;
         end else begin
-            prodExp7R   <= prodExp6R;
+            prodExp7R   <= $unsigned(prodExp6R);
         end
 
         // Determine if float is normal
         if (prodShift6R == 0) begin
             prodNorm7R  <= 1;
-        else begin
+        end else begin
             prodNorm7R  <= 0;
         end
 
@@ -336,8 +337,8 @@ module floating_point_multiply (
         prodExp8R       <= prodExp7R;
 
         // Extract mantissa and truncated bits
-        prodMantissaVar = prod7R[PROD_WIDTH+FRAC_WIDTH:PROD_WIDTH+1]
-        prodTruncVar    = prod7R[PROD_WIDTH:0]
+        prodMantissaVar = prod7R[PROD_WIDTH+FRAC_WIDTH:PROD_WIDTH+1];
+        prodTruncVar    = prod7R[PROD_WIDTH:0];
 
         prodMantissa8R  <= prodMantissaVar[MANTISSA_WIDTH-1:0];
 
@@ -351,12 +352,12 @@ module floating_point_multiply (
 
         // Determine if mantissa is at its maximum value
         maxMantissa8R   <= 0;
-        if (prodMantissaVar[MANTISSA_WIDTH-1:0] = MANTISSA_WIDTH{1'b1}) begin
+        if (prodMantissaVar[MANTISSA_WIDTH-1:0] == {MANTISSA_WIDTH{1'b1}}) begin
             if (prodNorm7R) begin
                 if (prodMantissaVar[FRAC_WIDTH-1]) begin
                     maxMantissa8R   <= 1;
                 end
-            else
+            end else begin
                 maxMantissa8R       <= 1;
             end
         end
@@ -375,7 +376,7 @@ module floating_point_multiply (
         prodNaN9R           <= prodNaN8R;
 
         // Increment mantissa when rounding up
-        prodMantissa9R      <= prodMantissa8R + roundBit;
+        prodMantissa9R      <= prodMantissa8R + roundBit8R;
 
         // Increment exponent when mantissa wraps
         // Update infinity flag if needed
@@ -385,16 +386,16 @@ module floating_point_multiply (
             if (prodSoftInf8R) begin
                 prodInf9R   <= 1;
             end
-        else
+        end else begin
             prodExp9R       <= prodExp8R;
         end
 
         /* Pipeline #10 */
         prodSign10R         <= prodSign9R;
-        if (aNaN9R) begin
+        if (prodNaN9R) begin
             prodExp10R      <= MAX_EXP;
-            prodMantissa10R <= {1'b1, (MANTISSA_WIDTH-1){1'b0}};
-        end else if (aInf9R) begin
+            prodMantissa10R <= {1'b1, {(MANTISSA_WIDTH-1){1'b0}}};
+        end else if (prodInf9R) begin
             prodExp10R      <= MAX_EXP;
             prodMantissa10R <= 0;
         end else begin
