@@ -127,13 +127,15 @@ module fifo (
     // Read pipeline signals
     reg [DATA_WIDTH-1:0] rdPipeR [1:0];
     reg [2:0] wrEnR;
+    reg [1:0] rdStickyR;
     reg rdEnR;
     
     // Keep track of which address should be written next
     // Assumes no concurrent read
     always @(posedge clkIn) begin
         if (rstIn) begin
-            wrEnR   <= 1;
+            wrEnR       <= 1;
+            rdStickyR   <= 0;
         end else begin
             if (wrEn && !rdEn) begin
                 wrEnR           <= 0;
@@ -155,6 +157,17 @@ module fifo (
                     wrEnR[2]    <= 1;
                 end
             end
+            
+            if (rdEn) begin
+                rdStickyR           <= {1'b0, rdStickyR[1]};
+            end
+            if (wrEn) begin
+                if (wrEnR[0] || (wrEnR[1] && rdEn)) begin // nextCount == 1
+                    rdStickyR[0]    <= 1;
+                end else if ((wrEnR[1] & !rdEn) || (wrEnR[2] && rdEn)) begin // nextCount == 2
+                    rdStickyR[1]    <= 1;
+                end
+            end
         end
     end
     
@@ -170,7 +183,11 @@ module fifo (
             // 2 reads in a row
             // Use data from RAM (assumes last 2 reads valid)
             if (rdEnR) begin
-                rdPipeR[0]  <= rdData;
+                if (rdStickyR[1]) begin
+                    rdPipeR[0]  <= rdPipeR[1];
+                end else begin
+                    rdPipeR[0]  <= rdData;
+                end
                 rdPipeR[1]  <= rdData;
                 
             // 1 read in a row
@@ -183,8 +200,8 @@ module fifo (
             
         // Last read was valid but current read was not
         // Take RAM value (addr + 1)
-        end else if (rdEnR) begin
-            rdPipeR[1]  <= rdData;
+        end else if (rdEnR && !rdStickyR[1]) begin
+            rdPipeR[1]      <= rdData;
         end
         
         // Handle FIFO empty or nearly empty
