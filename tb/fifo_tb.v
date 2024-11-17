@@ -6,8 +6,8 @@ module fifo_tb;
     parameter CLK_PERIOD = 10;
     parameter RESET_TIME = 100;
     
-    parameter FIFO_DEPTH = 256;
-    parameter FIFO_SKID  = 32;
+    parameter FIFO_DEPTH = 32;
+    parameter FIFO_SKID  = 4;
 
     // Derived parameters based on inputs
     localparam COUNT_WIDTH = $clog2(FIFO_DEPTH+1);
@@ -89,7 +89,7 @@ module fifo_tb;
                             $error("Expected rdValid = '1', Received rdValid = '0'");
                         end
                     end
-                    if (countR < (FIFO_DEPTH - FIFO_SKID)) begin
+                    if (countR <= (FIFO_DEPTH - FIFO_SKID)) begin
                         if (!wrReady) begin
                             $error("Expected wrReady = '1', Received wrReady = '0'");
                         end

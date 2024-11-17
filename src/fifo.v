@@ -46,7 +46,10 @@ module fifo (
     wire wrEn;
     wire rdEn;
 
+    // Only write when there will be no overflows
     assign wrEn = wrValidIn & (!fullR | rdEn);
+    
+    // Only read when the data is valid
     assign rdEn = rdReadyIn & rdValidR;
 
     always @(posedge clkIn) begin
@@ -60,6 +63,8 @@ module fifo (
             rdAddrR             <= 2;
         end else begin
             
+            // Determine next count and
+            // control signals based on next count
             if (wrEn && !rdEn) begin
                 countR          <= countR + 1;
                 if (countR == (FULL_COUNT - 1)) begin
@@ -84,29 +89,34 @@ module fifo (
                 end
             end
 
+            // Enable write ready as soon as reset is deasserted
             initR               <= 0;
             if (initR) begin
                 wrReadyR        <= 1;
-                rdValidR        <= 0;
             end
 
+            // Update write pointer
             if (wrEn) begin
                 wrAddrR         <= wrAddrR + 1;
             end
 
+            // Update read pointer
             if (rdEn) begin
                 rdAddrR         <= rdAddrR + 1;
             end
 
+            // Overflow detection
             if (wrValidIn && fullR && !rdEn) begin
                 $error("Fifo overflow detected at time %t", $realtime);
             end
         end
     end
 
+    // Ram signals
     reg [DATA_WIDTH-1:0] ram [0:FIFO_DEPTH-1];
     reg [DATA_WIDTH-1:0] rdData;
 
+    // Instantiate RAM
     always @(posedge clkIn) begin
         rdData      <= ram[rdAddrR];
         if (wrEn) begin
@@ -114,84 +124,80 @@ module fifo (
         end
     end
     
-    // reg [DATA_WIDTH-1:0] rdDataR;
+    // Read pipeline signals
     reg [DATA_WIDTH-1:0] rdPipeR [1:0];
-    // reg [DATA_WIDTH-1:0] wrDataR;
+    reg [2:0] wrEnR;
     reg rdEnR;
     
-    reg [COUNT_WIDTH-1:0] nextCount;
-    
+    // Keep track of which address should be written next
+    // Assumes no concurrent read
     always @(posedge clkIn) begin
-    
-        rdEnR           <= rdEn;
-        
-        /*if (wrEn) begin
-            wrDataR     <= wrDataIn;
-        end*/
-        
-        nextCount        = countR;
-        if (wrEn) begin
-            nextCount    = nextCount + 1;
-        end
-        if (rdEn) begin
-            nextCount    = nextCount - 1;
-        end
-        
-        /*if (nextCount < 3) begin
-            if (wrEn) begin
-                rdPipeR <= wrDataIn;
-            end
-        end else
-            if (rdEn) begin
-                
-            end
-        end*/
-        
-        /* if ((((countR == 1) && !rdEn) || ((countR == 2) && rdEn)) && wrEn) begin
-            rdPipeR <= wrDataIn; // 2nd write to memory
-        end else if (rdEn) begin
-            rdPipeR <= rdData; // Last RAM read
-        end
-            
-        if (rdEn) begin // Update on Read
-            if (countR == 1) begin 
-                rdDataR <= wrDataIn; // Accept any new inputs
-            end else if (countR == 2) begin 
-                rdDataR <= wrDataR; // Take last written value
-            end else begin
-                if (rdEnR) begin // Two reads
-                    rdDataR <= rdData; // RAM read
-                end else begin 
-                    rdDataR <= rdPipeR;
+        if (rstIn) begin
+            wrEnR   <= 1;
+        end else begin
+            if (wrEn && !rdEn) begin
+                wrEnR           <= 0;
+                if (countR == 0) begin
+                    wrEnR[1]    <= 1;
+                end
+                if (countR == 1) begin
+                    wrEnR[2]    <= 1;
+                end
+            end else if (!wrEn && rdEn) begin
+                wrEnR           <= 0;
+                if (countR == 1) begin
+                    wrEnR[0]    <= 1;
+                end
+                if (countR == 2) begin
+                    wrEnR[1]    <= 1;
+                end
+                if (countR == 3) begin
+                    wrEnR[2]    <= 1;
                 end
             end
-        end else if (!rdValidR && wrEn) begin // Update on 1st Write
-            rdDataR <= wrDataIn;
-        end */
-        
-        
-        if (rdEn) begin
-            if (rdEnR) begin
-                rdPipeR[0]  <= rdData; // +0
-                rdPipeR[1]  <= rdData;
-            end else begin
-                rdPipeR[0]  <= rdPipeR[1]; // +0
-                rdPipeR[1]  <= rdData; // +1
-            end
-        end else begin
-            if (rdEnR) begin
-                rdPipeR[1]  <= rdData; // +1
-            end
         end
+    end
+    
+    // Manage read pipeline
+    always @(posedge clkIn) begin
+    
+        // Determine if FIFO was read in the last cycle
+        rdEnR               <= rdEn;
+
+        // Handle reads from FIFO
+        if (rdEn) begin
+        
+            // 2 reads in a row
+            // Use data from RAM (assumes last 2 reads valid)
+            if (rdEnR) begin
+                rdPipeR[0]  <= rdData;
+                rdPipeR[1]  <= rdData;
+                
+            // 1 read in a row
+            // Take value in pipeline (addr + 1)
+            // Update next value in pipeline with RAM data (addr + 2)
+            end else begin
+                rdPipeR[0]  <= rdPipeR[1];
+                rdPipeR[1]  <= rdData;
+            end
+            
+        // Last read was valid but current read was not
+        // Take RAM value (addr + 1)
+        end else if (rdEnR) begin
+            rdPipeR[1]  <= rdData;
+        end
+        
+        // Handle FIFO empty or nearly empty
         if (wrEn) begin
-            if (nextCount == 1) begin
+            if (wrEnR[0] || (wrEnR[1] && rdEn)) begin // nextCount == 1
                 rdPipeR[0]  <= wrDataIn;
-            end else if (nextCount == 2) begin
+            end else if ((wrEnR[1] & !rdEn) || (wrEnR[2] && rdEn)) begin // nextCount == 2
                 rdPipeR[1]  <= wrDataIn;
             end
         end
     end
     
+    // Assign outputs
     assign wrReadyOut   = wrReadyR;
     assign rdDataOut    = rdPipeR[0];
     assign rdValidOut   = rdValidR;
