@@ -20,9 +20,11 @@ module fifo_tb;
 
     localparam INIT     = 0;
     localparam WRITE    = 1;
-    localparam READ     = 2;
+    localparam WAIT     = 2;
+    localparam READ     = 3;
 
     reg [1:0] stateR;
+    reg initR;
 
     reg wrValidR;
     reg [31:0] wrDataR;
@@ -45,31 +47,40 @@ module fifo_tb;
             wrDataR     <= 0;
             rdDataR     <= 0;
             countR      <= 0;
-            maxCountR   <= 1;
+            maxCountR   <= FIFO_DEPTH;
+            initR       <= 0;
         end else begin
             wrValidR    <= 0;
             rdReadyR    <= 0;
+            initR       <= 1;
+            if (wrValidR) begin
+                wrDataR <= wrDataR + 1;
+            end
+            if (rdReadyR) begin
+                rdDataR <= rdDataR + 1;
+            end
             case (stateR)
                 INIT : begin
-                    stateR      <= WRITE;
-                    countR      <= 0;
-                    if (maxCountR == FIFO_DEPTH) begin
-                        maxCountR   <= 1;
-                    end else begin
-                        maxCountR   <= maxCountR + 1;
-                    end
-                    if (!wrReady) begin
-                        $error("Expected wrReady = '1', Received wrReady = '0'");
-                    end
-                    if (rdValid) begin
-                        $error("Expected rdValid = '0', Received rdValid = '1'");
+                    if (initR) begin                   
+                        stateR      <= WRITE;
+                        countR      <= 0;
+                        if (maxCountR == FIFO_DEPTH) begin
+                            maxCountR   <= 1;
+                        end else begin
+                            maxCountR   <= maxCountR + 1;
+                        end
+                        if (!wrReady) begin
+                            $error("Expected wrReady = '1', Received wrReady = '0'");
+                        end
+                        if (rdValid) begin
+                            $error("Expected rdValid = '0', Received rdValid = '1'");
+                        end
                     end
                 end
                 WRITE : begin
                     wrValidR    <= 1;
-                    wrDataR     <= wrDataR + 1;
                     countR      <= countR + 1;
-                    if (countR == 0) begin
+                    if (countR < 2) begin
                         if (rdValid) begin
                             $error("Expected rdValid = '0', Received rdValid = '1'");
                         end
@@ -77,7 +88,7 @@ module fifo_tb;
                         if (!rdValid) begin
                             $error("Expected rdValid = '1', Received rdValid = '0'");
                         end
-                    begin
+                    end
                     if (countR < (FIFO_DEPTH - FIFO_SKID)) begin
                         if (!wrReady) begin
                             $error("Expected wrReady = '1', Received wrReady = '0'");
@@ -88,24 +99,46 @@ module fifo_tb;
                         end
                     end
                     if (countR == (maxCountR - 1)) begin
-                        stateR  <= READ;
+                        if (maxCountR == 1) begin
+                            stateR  <= READ;
+                        end else begin
+                            stateR  <= READ;
+                        end
                     end
                 end
+                /*WAIT : begin
+                    if (rdValid) begin
+                        $error("Expected rdValid = '0', Received rdValid = '1'");
+                    end
+                    stateR          <= READ;
+                end*/
                 READ : begin
-                    rdReadyR    <= 1;
-                    rdDataR     <= rdDataR + 1;
-                    if (!rdValid) begin
-                        $error("Expected rdValid = '1', Received rdValid = '0'");
-                    end
-                    if (rdData !== rdDataR) begin
-                        $error("Expected rdData = 0x%08X, Received rdData = 0x%08X", rdDataR, rData);
-                    end
-                    countR = countR - 1;
-                    if (countR == 1) begin
-                        stateR  <= INIT;
+                    rdReadyR        <= 1;
+                    if (rdReadyR) begin
+                        if (!rdValid) begin
+                            $error("Expected rdValid = '1', Received rdValid = '0'");
+                        end
+                        if (rdData !== rdDataR) begin
+                            $error("Expected rdData = 0x%08X, Received rdData = 0x%08X", rdDataR, rdData);
+                        end
+                        countR      <= countR - 1;
+                        if (countR == 1) begin
+                            stateR      <= INIT;
+                            rdReadyR    <= 0;
+                        end
+                    end else begin
+                        if (countR == 1) begin
+                            if (rdValid) begin
+                                $error("Expected rdValid = '0', Received rdValid = '1'");
+                            end
+                        end else begin
+                            if (!rdValid) begin
+                                $error("Expected rdValid = '1', Received rdValid = '0'");
+                            end
+                        end
                     end
                 end
-            end
+            endcase
         end
     end
 
