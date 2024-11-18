@@ -125,54 +125,72 @@ module fifo (
     end
     
     // Read pipeline signals
-    reg [DATA_WIDTH-1:0] rdPipeR [1:0];
+    reg [DATA_WIDTH-1:0] rdPipeDataR [1:0];
+    reg [1:0] rdPipeValidR;
     reg [2:0] wrEnR;
-    reg [1:0] rdStickyR;
     reg rdEnR;
     
     // Keep track of which address should be written next
     // Assumes no concurrent read
     always @(posedge clkIn) begin
+    
+        if (wrEn && !rdEn) begin
+            wrEnR               <= 0;
+            if (countR == 0) begin
+                wrEnR[1]        <= 1;
+            end
+            if (countR == 1) begin
+                wrEnR[2]        <= 1;
+            end
+        end else if (!wrEn && rdEn) begin
+            wrEnR               <= 0;
+            if (countR == 1) begin
+                wrEnR[0]        <= 1;
+            end
+            if (countR == 2) begin
+                wrEnR[1]        <= 1;
+            end
+            if (countR == 3) begin
+                wrEnR[2]        <= 1;
+            end
+        end
+        
+        rdEnR                   <= rdEn;
+        
+        if (rdEn) begin
+            rdPipeValidR[0]     <= rdPipeValidR[1];
+            rdPipeValidR[1]     <= 0;
+            rdPipeDataR [0]     <= rdPipeDataR [1];
+        end
+        
+        if (rdEnR) begin
+            if (rdEn && !rdPipeValidR[1]) begin
+                rdPipeValidR[0] <= 1;
+                rdPipeDataR [0] <= rdData;
+            end else if (rdEn || !rdPipeValidR[1]) begin
+                rdPipeValidR[1] <= 1;
+                rdPipeDataR [1] <= rdData;
+            end
+        end
+        
+        if (wrEn) begin
+            if (wrEnR[0] || (wrEnR[1] && rdEn)) begin // nextCount == 1
+                rdPipeValidR[0] <= 1;
+                rdPipeDataR [0] <= wrDataIn;
+            end else if ((wrEnR[1] & !rdEn) || (wrEnR[2] && rdEn)) begin // nextCount == 2
+                rdPipeValidR[1] <= 1;
+                rdPipeDataR [1] <= wrDataIn;
+            end
+        end
+        
         if (rstIn) begin
-            wrEnR       <= 1;
-            rdStickyR   <= 0;
-        end else begin
-            if (wrEn && !rdEn) begin
-                wrEnR           <= 0;
-                if (countR == 0) begin
-                    wrEnR[1]    <= 1;
-                end
-                if (countR == 1) begin
-                    wrEnR[2]    <= 1;
-                end
-            end else if (!wrEn && rdEn) begin
-                wrEnR           <= 0;
-                if (countR == 1) begin
-                    wrEnR[0]    <= 1;
-                end
-                if (countR == 2) begin
-                    wrEnR[1]    <= 1;
-                end
-                if (countR == 3) begin
-                    wrEnR[2]    <= 1;
-                end
-            end
-            
-            if (rdEn) begin
-                rdStickyR           <= {1'b0, rdStickyR[1]};
-            end
-            if (wrEn) begin
-                if (wrEnR[0] || (wrEnR[1] && rdEn)) begin // nextCount == 1
-                    rdStickyR[0]    <= 1;
-                end else if ((wrEnR[1] & !rdEn) || (wrEnR[2] && rdEn)) begin // nextCount == 2
-                    rdStickyR[1]    <= 1;
-                end
-            end
+            wrEnR               <= 1;
+            rdPipeValidR        <= 0;
         end
     end
     
     // Manage read pipeline
-    always @(posedge clkIn) begin
+    /* always @(posedge clkIn) begin
     
         // Determine if FIFO was read in the last cycle
         rdEnR               <= rdEn;
@@ -204,19 +222,83 @@ module fifo (
             rdPipeR[1]      <= rdData;
         end
         
+        
+        
+        if (rdEn) begin
+            rdPipeR[0]      <= rdPipeR[1];
+            rdPipeValidR    <= {0, rdPipeValidR[1]}
+        end
+        
         // Handle FIFO empty or nearly empty
         if (wrEn) begin
             if (wrEnR[0] || (wrEnR[1] && rdEn)) begin // nextCount == 1
-                rdPipeR[0]  <= wrDataIn;
+                rdPipeR[0]      <= wrDataIn;
+                rdPipeValidR[0] <= 1;
             end else if ((wrEnR[1] & !rdEn) || (wrEnR[2] && rdEn)) begin // nextCount == 2
-                rdPipeR[1]  <= wrDataIn;
+                rdPipeR[1]      <= wrDataIn;
+                rdPipeValidR[1] <= 1;
             end
+        end
+    end */
+    
+    /*if (rdEn) begin
+        rdPipeR[0]      <= rdPipeR[1];
+    end
+    
+    rdEnR               <= rdEn && (nextCount
+    
+    wrEnPipe            <= ((wrEn && (nextCount <= 2)) || (rdEnR)) ? 1 : 0;
+    wrDataPipe          <= (wrEn && (nextCount <= 2)) ? wrDataIn : rdData;
+    
+    if (wrEn) begin
+        if (nextCount == 1) begin // nextCount == 1
+            rdPipeR[0]  <= wrDataIn;
+        end else if (nextCount == 2) begin // nextCount == 2
+            rdPipeR[1]  <= wrDataIn;
+        end
+    end*/
+    
+    /*reg  [DATA_WIDTH-1:0] wrDataR;
+    
+    wire [COUNT_WIDTH-1:0] nextCount;
+    wire [DATA_WIDTH-1:0] rdPipeData;
+    wire rdPipeValid;
+    wire rdPipeReady;
+    
+    reg rdEnR;
+    
+    always @(posedge clkIn) begin
+        rdEnR       <= 0;
+        if (countR > 2) begin
+            rdEnR   <= rdPipeReady || rdEn;
+        end
+        
+        if (wrEn) begin
+            wrDataR <= wrDataIn;
         end
     end
     
+    if rdPipeReady || rdEn
+    
+    assign nextCount   = (wrEn && !rdEn) ? countR + 1 : ((!wrEn && rdEn) ? countR - 1 : countR);
+    assign rdPipeData  = rdEnR ? rdData : wrDataIn; // (wrEn && (nextCount <= 2)) ? wrDataIn : rdData;
+    assign rdPipeValid = ((wrEn && (nextCount <= 2)) || rdEnR) ? 1 : 0;
+    
+    srl_fifo #(
+        .DATA_WIDTH(DATA_WIDTH),
+        .FIFO_DEPTH(2),
+        .FIFO_SKID(1)) rd_pipe(
+        .clkIn(clkIn),
+        .rstIn(rstIn),
+        .wrDataIn(rdPipeData),
+        .wrValidIn(rdPipeValid),
+        .wrReadyOut(rdPipeReady),
+        .rdDataOut(rdDataOut),
+        .rdReadyIn(rdReadyIn));*/
+    
     // Assign outputs
     assign wrReadyOut   = wrReadyR;
-    assign rdDataOut    = rdPipeR[0];
+    assign rdDataOut    = rdPipeDataR[0];
     assign rdValidOut   = rdValidR;
 
 endmodule
