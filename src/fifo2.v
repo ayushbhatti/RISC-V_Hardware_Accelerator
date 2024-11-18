@@ -43,14 +43,29 @@ module fifo (
     reg [ADDR_WIDTH-1:0] wrAddrR;
     reg [ADDR_WIDTH-1:0] rdAddrR;
 
+    reg rdEnR;
+    
     wire wrEn;
     wire rdEn;
 
+    wire rdPipeReady;
+    wire [1:0] rdPipeCount;
+    
     // Only write when there will be no overflows
     assign wrEn = wrValidIn & (!fullR | rdEn);
     
     // Only read when the data is valid
-    assign rdEn = rdReadyIn & rdValidR;
+    assign rdEn = ((rdPipeCount == 0) || ((rdPipeCount == 1) && (!rdEnR || rdReadyIn)) || ((rdPipeCount == 2) && !rdEnR && rdReadyIn)) & rdValidR;
+    
+    always @(posedge clkIn) begin
+        if (rstIn) begin
+            rdEnR   <= 0;
+        end else begin
+            rdEnR   <= rdEn;
+        end
+    end
+    
+    // assign rdEn = rdReadyIn & rdValidR;
 
     always @(posedge clkIn) begin
         if (rstIn) begin
@@ -60,7 +75,7 @@ module fifo (
             fullR               <= 0;
             initR               <= 1;
             wrAddrR             <= 0;
-            rdAddrR             <= 2;
+            rdAddrR             <= 0;
         end else begin
             
             // Determine next count and
@@ -125,12 +140,78 @@ module fifo (
     end
     
     // Read pipeline signals
-    reg [DATA_WIDTH-1:0] rdPipeDataR [1:0];
+    /* reg [DATA_WIDTH-1:0] rdPipeDataR [1:0];
     reg [1:0] rdPipeValidR;
     reg rdEnR;
     
+    assign rdReady = rdValidR 
+    
+    assign rdEn = rdReadyIn | !rdPipeValidR[1] | !rdPipeValidR[0];
+    
+    assign rdReady = !rdPipeValidR[1] | !rdPipeValidR[0]
     
     always @(posedge clkIn) begin
+        rdEnR       <= rdEn;
+        
+        if (rdEn || ~rdPipeValidR[0]) begin
+            rdPipeValidR[0]     <= 0;
+            rdPipeDataR [0]     <= rdPipeDataR[0];
+            if (rdPipeValidR[1]) begin
+                rdPipeValidR[0] <= 1;
+                rdPipeDataR [0] <= rdPipeDataR[1];
+            end else if (rdEnR) begin
+                rdPipeValidR[0] <= 1;
+                rdPipeDataR [0] <= rdData;
+            end
+        end
+        
+        if (rdPipeValidR[0] && (rdEn   begin
+            
+        end
+        
+        if (
+        
+        if (rdEn) begin
+            if (rdPipeValidR[1]) begin
+                rdPipeValidR[0] <= 1;
+                rdPipeDataR[0]  <= rdPipeDataR[1];
+            end else begin
+                rdPipeValidR[0] <= rdEnR;
+                rdPipeDataR[0]  <= rdData;
+            end
+        end
+        
+        if (rdEnR) begin
+            rdPipeDataR[1]      <= rdData;
+        end
+        
+        if (rdEnR && rdPipeValidR[1]) begin
+            
+        
+            rdPipeDataR[0] <= rdPipeDataR[1];
+            
+        rdReadyR    <= rdReady;
+        
+        if (rdReadyR & (rdPipeValidR[0] == 1)
+        if ((!rdPipeValidR[1] | !rdPipeValidR[1] | rdReadyIn) & rdReadyR) begin
+            
+        rdReadyR                <= rdReady;
+        
+        rdValid2R               <= rdValidR;
+        
+        
+        if (rstIn) begin
+            rdReadyR            <= 0;
+        end else begin
+            if (rdReadyIn) begin
+                rdPipeValidR[1] <= rdPipeValidR[0] | rdValidR;
+            end
+            if (rdReadyIn) begin
+                rdPipeValidR[0] <= 
+            end
+            
+    always @(posedge clkIn) begin
+    
         if (rstIn) begin
             rdEnR           <= 0;
             rdPipeValidR    <= 0;
@@ -172,11 +253,25 @@ module fifo (
                 end
             end
         end
-    end
-    
+    end*/
+        
+    srl_fifo #(
+        .DATA_WIDTH(DATA_WIDTH),
+        .FIFO_DEPTH(2),
+        .FIFO_SKID(1)) srl_fifo(
+        .clkIn(clkIn),
+        .rstIn(rstIn),
+        .wrDataIn(rdData),
+        .wrValidIn(rdEnR),
+        .wrReadyOut(rdPipeReady),
+        .rdDataOut(rdDataOut),
+        .rdValidOut(rdValidOut),
+        .rdReadyIn(rdReadyIn),
+        .countOut(rdPipeCount));
+        
     // Assign outputs
     assign wrReadyOut   = wrReadyR;
-    assign rdDataOut    = rdPipeDataR[0];
-    assign rdValidOut   = rdValidR;
+    // assign rdDataOut    = rdPipeDataR[0];
+    // assign rdValidOut   = rdValidR;
 
 endmodule
