@@ -75,7 +75,7 @@ module cnn_hw_accelerator (
             assign busWrData = wrDataIn[DATA_HI:DATA_LO];
             assign busWrEn   = wrEnIn  [  WE_HI:WE_LO  ];
 
-               
+              
         
         if (NUM_BYTES >= BUS_WE_WIDTH) begin
             ADDR_WIDTH = NUM_BYTES/BUS_WE_WIDTH
@@ -110,6 +110,19 @@ module cnn_hw_accelerator (
         end
     endgenerate
     
+    rowIdxR     <= rowIdxR + VECTOR_SIZE;
+    if (rowIdxR >= maxRowIdxR) begin
+        rowIdxR <= 0;
+    end
+    
+    colIdxR     <= colIdxR + 1;
+    if (colIdxR >= maxColIdxR) begin
+        doneR   <= 1;
+    end
+    
+    addrR       <= colIdxR * rowSizeR + rowIdxR + baseAddrR;
+    
+    addrR[i]    <= addrR
     always @(posedge clkIn) begin
         if (rstIn) begin
         end else begin
