@@ -122,6 +122,12 @@ module cnn_hw_accelerator (
     
     addrR       <= colIdxR * rowSizeR + rowIdxR + baseAddrR;
     
+    shift2R     <= addrR[SHIFT_HI:SHIFT_LO];
+    for (i = 0; i < VECTOR_SIZE; i = i + 1) begin
+        addr2R[i] <= addrR + i;
+    end
+    addr3R[i]     <= addr2R[i][ADDR_HI:ADDR_LO];
+    
     addrR[i]    <= addrR
     always @(posedge clkIn) begin
         if (rstIn) begin
