@@ -97,6 +97,8 @@ module cnn_hw_accelerator (
         end
     endgenerate
     
+    baseAddrR   <= baseAddrR + 1;
+    
     generate
         for (i = 0; i < VECTOR_SIZE; i = i + 1) begin
             always @(posedge clkIn) begin
@@ -110,11 +112,163 @@ module cnn_hw_accelerator (
         end
     endgenerate
     
-    rowIdxR     <= rowIdxR + VECTOR_SIZE;
-    if (rowIdxR >= maxRowIdxR) begin
-        rowIdxR <= 0;
+    assign filtAdv = rowDoneR & colDoneR & fifoWrReady;
+
+    assign baseAdv = rowDoneR & colDoneR & fifoWrReady;
+    assign baseClr = cntClrR & fifoWrReady;
+    
+    assign colAdv  = rowDoneR;
+    assign colClr  = baseClr | baseAdv;
+    
+    assign rowAdv  = 1;
+    assign rowClr  = colClr | (colAdv & !colClr);
+    
+    counter #(
+        .CNT_WIDTH(CNT_WIDTH)) row_cnt (
+        .clkIn(clkIn),
+        .rstIn(1'b0),
+        .clrIn(rowClr),
+        .advIn(rowAdv),
+        .endValIn(maxRowCntR),
+        .cntOut(rowCntR),
+        .doneOut(rowDoneR));
+        
+    counter #(
+        .CNT_WIDTH(CNT_WIDTH)) col_cnt (
+        .clkIn(clkIn),
+        .rstIn(1'b0),
+        .clrIn(colClr),
+        .advIn(colAdv),
+        .endValIn(maxColCntR),
+        .cntOut(colCntR),
+        .doneOut(colDoneR));
+        
+    counter #(
+        .CNT_WIDTH(CNT_WIDTH)) base_cnt (
+        .clkIn(clkIn),
+        .rstIn(1'b0),
+        .clrIn(baseClr),
+        .advIn(baseAdv),
+        .endValIn(maxAddrR),
+        .cntOut(baseCntR),
+        .doneOut(baseDoneR));
+        
+    assign done = rowDoneR & colDoneR & baseDoneR;
+    
+    always @(posedge clkIn) begin
+        if (rstIn) begin
+            stateR  <= IDLE;
+        end else begin
+            case (stateR)
+                IDLE : begin
+                    numCellsR   <= rowSizeIn * colSizeIn;
+                    maxRowCntR  <= rowSizeIn - 1;
+                    maxColCntR  <= colSizeIn - 1;
+                    if (startIn) begin
+                        stateR  <= INIT;
+                    end
+                end
+                INIT : begin
+                    maxBaseCntR <= numCellsR - 1;
+                    stateR      <= CALC;
+                end
+                CALC : begin
+                    if (done) begin
+                        stateR  <= IDLE;
+                    end
+                end
+            endcase
+        end
     end
     
+    rowDoneR & colDoneR & baseDoneR;
+    
+    always @(posedge clkIn) begin
+        if (startR) begin
+            rowIdxR             <= 0;
+            if (maxRowIdxR == 0) begin
+                rowDoneR        <= 1;
+            end else begin
+                rowDoneR        <= 0;
+            end
+        else
+            nextRowIdxVar        = rowIdxR + 1;
+            if (nextRowIdxR == maxRowIdxR) begin
+                rowDoneR        <= 1;
+            else
+                rowDoneR        <= 0;
+            end
+            rowIdxR             <= nextRowIdxVar;
+        end
+    end
+    
+    always @(posedge clkIn) begin
+        if (startR) begin
+            colIdxR             <= 0;
+            if (maxColIdxR == 0) begin
+                colDoneR        <= 1;
+            end else begin
+                colDoneR        <= 0;
+            end
+        end else begin
+            if (rowDoneR) begin
+                nextColIdxVar    = colIdxR + 1;
+            end else begin
+                nextColIdxVar    = colIdxR;
+            end
+            if (nextColIdxVar == maxColIdxR) begin
+                colDoneR        <= 1;
+            else
+                colDoneR        <= 0;
+            end
+            colIdxR             <= nextColIdxVar;
+        end
+    end
+           
+    always @(posedge clkIn) begin
+    
+    end
+    
+            if (rowSizeIn < VECTOR_SIZE) begin
+                maxRowIdxR      <= 0;
+                rowDoneR        <= 1;
+            else
+                maxRowIdxR      <= rowSizeIn - VECTOR_SIZE;
+                rowDoneR        <= 0;
+            end
+        end else begin
+            rowIdxR             <= rowIdxR + VECTOR_SIZE;
+            rowDoneR            <= 0;
+            if (rowIdxR >= maxRowIdxR) begin
+                rowIdxR         <= 0;
+                rowDoneR        <= 1;
+            end
+        end
+    end
+    
+    always @(posedge clkIn) begin
+        if (startR) begin
+            colIdx2R            <= 0;
+            maxColIdx2R         <= colSizeR - 1;
+            if ((colSizeR == 1) && rowDoneR) begin
+                colDone2R       <= 1;
+            else
+                colDone2R       <= 0;
+            end
+        end else begin
+            colDone2R           <= 0;
+            if (rowDone2R) begin
+                colIdx2R        <= colIdx2R + 1;
+                if (colIdx2R >= maxColIdx2R) begin
+                    colIdx2R    <= 0;
+                    colDone2R   <= 1;
+                end
+            end
+        end
+    end
+    
+    
+    colIdx2R * rowIdx2R
     colIdxR     <= colIdxR + 1;
     if (colIdxR >= maxColIdxR) begin
         doneR   <= 1;
