@@ -1,6 +1,11 @@
 module cnn_hw_accelerator (
     clkIn;
     rstIn;
+    startIn;
+    filtRowsIn;
+    filtColsIn;
+    dataRowsIn;
+    dataColsIn;
     addrIn;
     wrEnIn;
     wrDataIn;
@@ -25,6 +30,9 @@ module cnn_hw_accelerator (
     // Maximum size of input matrices (in elements)
     parameter MAX_SIZE        = 4096;
 
+    // Derived vector size parameters
+    parameter VECTOR_SIZE_LOG2 = $clog2(VECTOR_SIZE);
+    
     // Derived RAM parameters
     localparam RAM_DEPTH      = MAX_SIZE/VECTOR_SIZE;
     localparam RAM_ADDR_WIDTH = $clog2(RAM_DEPTH);
@@ -50,7 +58,7 @@ module cnn_hw_accelerator (
     input  readyIn;
     output validOut;
     output [DATA_WIDTH-1:0] dataOut;
-
+    
     reg [ADDR_WIDTH-1:0] addrR [0:VECTOR_SIZE-1];
     reg validR [VECTOR_SIZE-1];
     reg lastR;
@@ -161,9 +169,10 @@ module cnn_hw_accelerator (
         end else begin
             case (stateR)
                 IDLE : begin
-                    numCellsR   <= rowSizeIn * colSizeIn;
-                    maxRowCntR  <= rowSizeIn - 1;
-                    maxColCntR  <= colSizeIn - 1;
+                    numCellsR   <= dataRowsIn * dataColsIn;
+                    maxColCntR  <= filtColsIn - 1;
+                    maxRowCntR  <= filtRowsIn[ROWS_HI:ROWS_LO] - 1;
+                    lastRowCntR <= filtRowsIn[ROWS_LO-1:0] - 1;
                     if (startIn) begin
                         stateR  <= INIT;
                     end
@@ -180,6 +189,78 @@ module cnn_hw_accelerator (
             endcase
         end
     end
+    
+    always @(posedge clkIn) begin
+        if (rstIn) begin
+            rdEn2R  <= 0;
+        end else begin
+            for (i = 0; i < VECTOR_SIZE; i = i + 1) begin
+                if (rowDoneR) begin
+                    if (i < lastRowCntR) begin
+                        rdEn2R[i] <= 1;
+                    end else begin
+                        rdEn2R[i] <= 0;
+                    end
+                end else begin
+                    rdEn2R[i] <= 1;
+                end
+            end
+        end
+    end
+    
+    delay #(
+        .LATENCY(2),
+        .DATA_WIDTH(VECTOR_SIZE)) rden_delay (
+        .clkIn(clkIn),
+        .rstIn(rstIn),
+        .dataIn(rdEn2R),
+        .dataOut(rdEn4R));
+    
+    always @(posedge clkIn) begin
+    
+        // Pipeline #2
+        addr2R   <= {rowCntR, VECTOR_SIZE_LOG2{1'b0}} * colCntR;
+        offset2R <= {rowCntR, VECTOR_SIZE_LOG2{1'b0}} + baseCntR:
+        rowCnt2R <= {rowCntR, VECTOR_SIZE_LOG2{1'b0}};
+        
+        // Pipeline #3
+        dataAddr3R  <= addr2R + offset2R;
+        filtAddr3R  <= addr2R + rowCnt2R;
+        
+        // Pipeline #4
+        dataShift4R = dataAddr3R[(VECTOR_SIZE_LOG2-1):0];
+        filtShift4R = filtAddr3R[(VECTOR_SIZE_LOG2-1):0];
+        
+        for (i = 0; i < VECTOR_SIZE; i = i + 1) begin
+            dataAddrVar  = dataAddr3R + i;
+            filtAddrVar  = filtAddr3R + i;
+            
+            dataAddr4R[(i*RAM_ADDR_WIDTH)+:RAM_ADDR_WIDTH] <= dataAddrVar[VECTOR_SIZE_LOG2+:RAM_ADDR_WIDTH];            
+            filtAddr4R[(i*RAM_ADDR_WIDTH)+:RAM_ADDR_WIDTH] <= filtAddrVar[VECTOR_SIZE_LOG2+:RAM_ADDR_WIDTH];
+        end
+        
+        // Pipeline #5
+        dataAddr5R <= (dataAddr4R << (dataShift4R*RAM_ADDR_WIDTH)) | (dataAddr4R >> ((VECTOR_SIZE - dataShift4R)*RAM_ADDR_WIDTH));
+        filtAddr5R <= (filtAddr4R << (filtShift4R*RAM_ADDR_WIDTH)) | (filtAddr4R >> ((VECTOR_SIZE - filtShift4R)*RAM_ADDR_WIDTH));
+    end
+    
+    always @(posedge clkIn) begin
+        if (rstIn) begin
+            dataRdEn5R <= 0;
+            filtRdEn5R <= 0;
+        end else begin
+            dataRdEn5R <= (rdEn4R << dataShift) | (rdEn4R >> (VECTOR_SIZE - dataShift));
+            filtRdEn5R <= (rdEn4R << filtShift) | (rdEn4R >> (VECTOR_SIZE - filtShift));
+        end
+    end
+    
+    
+    filtAddrR <= 
+    
+    
+    cell2R    <= 
+    
+    
     
     rowDoneR & colDoneR & baseDoneR;
     
