@@ -76,14 +76,14 @@ module cnn_hw_accelerator (
         localparam NUM_BYTES    = RAM_WE_WIDTH*VECTOR_SIZE;
         localparam ADDR_LO      = $clog2(NUM_BYTES);
         localparam ADDR_HI      = RAM_ADDR_WIDTH + ADDR_LO;
-
-        // Constant for selecting write select bits
-        localparam WR_SEL_LO    = $clog2(RAM_WE_WIDTH);
-        localparam WR_SEL_HI    = WR_SEL_LO + VECTOR_SIZE - 1;
         
         // Constants for mapping write enable bits
         localparam GROUP_SIZE   = BUS_WE_WIDTH/RAM_WE_WIDTH;
         localparam NUM_GROUPS   = NUM_BYTES/BUS_WE_WIDTH;
+
+        // Constant for selecting write select bits
+        localparam WR_SEL_LO    = $clog2(RAM_WE_WIDTH) + $clog2(GROUP_SIZE);
+        localparam WR_SEL_HI    = ADDR_LO - 1;
     
         // Extract address and write select bits
         wire [RAM_ADDR_WIDTH:0] busAddr;
@@ -102,6 +102,9 @@ module cnn_hw_accelerator (
             // Determine indices of data bits
             localparam DATA_LO = (i % GROUP_SIZE) * RAM_DATA_WIDTH;
             localparam DATA_HI = DATA_LO + RAM_DATA_WIDTH - 1;
+            
+            // Determine corresponding write select
+            localparam WR_SEL  = i / GROUP_SIZE;
 
             // Extracted data and write enable bits
             wire [  RAM_DATA_WIDTH-1:0] busWrData;
@@ -116,7 +119,7 @@ module cnn_hw_accelerator (
                 busWrDataR[i] <= busWrData;
                 for (j = 0; j < 2; j = j + 1) begin
                     busWrEnR[j][i] <= 0;
-                    if ((busAddr[RAM_ADDR_WIDTH] == j) && (busWrSel == i)) begin
+                    if ((busAddr[RAM_ADDR_WIDTH] == j) && (busWrSel == WR_SEL)) begin
                         busWrEnR[j][i] <= busWrEn;
                     end
                 end
@@ -425,7 +428,7 @@ module cnn_hw_accelerator (
     end
     
     // RAM constants
-    localparam WREN_ZERO  = {   VECTOR_SIZE{1'b0}};
+    localparam WREN_ZERO  = {  RAM_WE_WIDTH{1'b0}};
     localparam DATA_ZERO  = {RAM_DATA_WIDTH{1'b0}};
     localparam RD_LATENCY = 1;
        
@@ -475,7 +478,7 @@ module cnn_hw_accelerator (
             .DATA_WIDTH(VECTOR_SIZE_LOG2)) data_delay (
             .clkIn(clkIn),
             .rstIn(1'b0),
-            .dataIn(dataRdShift6R),
+            .dataIn(dataShift6R),
             .dataOut(dataAShift)); 
     endgenerate
         
@@ -512,7 +515,7 @@ module cnn_hw_accelerator (
             .DATA_WIDTH(VECTOR_SIZE_LOG2)) filt_delay (
             .clkIn(clkIn),
             .rstIn(1'b0),
-            .dataIn(filtRdShift6R),
+            .dataIn(filtShift6R),
             .dataOut(dataBShift)); 
     endgenerate
     

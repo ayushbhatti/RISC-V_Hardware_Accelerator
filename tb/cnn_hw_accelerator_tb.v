@@ -19,7 +19,7 @@ module cnn_hw_accelerator_tb;
     localparam CNT_WIDTH     = $clog2(NUM_WORDS);
     localparam DIM_WIDTH     = $clog2(MAX_SIZE) + 1;
     localparam DATA_ADDR     = 0;
-    localparam FILT_ADDR     = 1 << (CNT_WIDTH + WE_WIDTH);
+    localparam FILT_ADDR     = 1 << ($clog2(MAX_SIZE) + $clog2(WE_WIDTH));
     
     // State Enumerations
     localparam IDLE  = 0;
@@ -58,8 +58,8 @@ module cnn_hw_accelerator_tb;
     reg [CNT_WIDTH-1:0] cntR;
     reg firstR;
     
+    wire [DATA_WIDTH-1:0] resData;
     wire resValid;
-    wire resData;
     wire error;
     
     clk_gen #(.CLK_PERIOD(CLK_PERIOD)) clk_gen_i (.clkOut(clk));
