@@ -239,6 +239,7 @@ module cnn_hw_accelerator (
         end
         
         // Pipeline #5
+        // Circular shift
         dataAddr5R <= (dataAddr4R << (dataShift4R*RAM_ADDR_WIDTH)) | (dataAddr4R >> ((VECTOR_SIZE - dataShift4R)*RAM_ADDR_WIDTH));
         filtAddr5R <= (filtAddr4R << (filtShift4R*RAM_ADDR_WIDTH)) | (filtAddr4R >> ((VECTOR_SIZE - filtShift4R)*RAM_ADDR_WIDTH));
     end
@@ -286,162 +287,72 @@ module cnn_hw_accelerator (
         end
     end
     
-    
-    filtAddrR <= 
-    
-    
-    cell2R    <= 
-    
-    
-    
-    rowDoneR & colDoneR & baseDoneR;
-    
-    always @(posedge clkIn) begin
-        if (startR) begin
-            rowIdxR             <= 0;
-            if (maxRowIdxR == 0) begin
-                rowDoneR        <= 1;
-            end else begin
-                rowDoneR        <= 0;
-            end
-        else
-            nextRowIdxVar        = rowIdxR + 1;
-            if (nextRowIdxR == maxRowIdxR) begin
-                rowDoneR        <= 1;
-            else
-                rowDoneR        <= 0;
-            end
-            rowIdxR             <= nextRowIdxVar;
+    localparam WREN_ZERO = {VECTOR_SIZE{1'b0}};
+    localparam DATA_ZERO = { DATA_WIDTH{1'b0}};
+                
+    // Generate Data RAM for each vector element
+    generate
+        for (i = 0; i < VECTOR_SIZE; i = i + 1) begin
+        
+            wire [RAM_ADDR_WIDTH-1:0] rdAddr;
+            wire [DATA_WIDTH-1:0] rdData;
+            
+            assign rdAddr = dataAddr5R[i*RAM_ADDR_WIDTH+:RAM_ADDR_WIDTH];
+            
+            dp_ram #(
+                .DATA_WIDTH(DATA_WIDTH),
+                .RAM_DEPTH(RAM_DEPTH)) data_ram_i(
+                .clkIn(clkIn),
+                .rstIn(rstIn),
+                .addrAIn(busAddr[i]),
+                .wrEnAIn(busWrEn[i]),
+                .wrDataAIn(busWrData[i]),
+                .rdEnAIn(1'b0),
+                .addrBIn(rdAddr),
+                .wrEnBIn(WREN_ZERO),
+                .wrDataBIn(DATA_ZERO),
+                .rdEnBIn(dataRdEn5R[i]),
+                .rdDataBOut(rdData),
+                .rdAckBOut(valid[i]));
+                
+            assign dataA[DATA_WIDTH*i+:DATA_WIDTH] = rdData;
+            
         end
-    end
-    
-    always @(posedge clkIn) begin
-        if (startR) begin
-            colIdxR             <= 0;
-            if (maxColIdxR == 0) begin
-                colDoneR        <= 1;
-            end else begin
-                colDoneR        <= 0;
-            end
-        end else begin
-            if (rowDoneR) begin
-                nextColIdxVar    = colIdxR + 1;
-            end else begin
-                nextColIdxVar    = colIdxR;
-            end
-            if (nextColIdxVar == maxColIdxR) begin
-                colDoneR        <= 1;
-            else
-                colDoneR        <= 0;
-            end
-            colIdxR             <= nextColIdxVar;
+    endgenerate
+        
+    // Generate Filter RAM for each vector element
+    generate
+        for (i = 0; i < VECTOR_SIZE; i = i + 1) begin
+        
+            wire [RAM_ADDR_WIDTH-1:0] rdAddr;
+            wire [DATA_WIDTH-1:0] rdData;
+            
+            assign rdAddr = filtAddr[i*RAM_ADDR_WIDTH+:RAM_ADDR_WIDTH];
+            
+            dp_ram #(
+                .DATA_WIDTH(DATA_WIDTH),
+                .RAM_DEPTH(RAM_DEPTH)) data_ram_i(
+                .clkIn(clkIn),
+                .rstIn(rstIn),
+                .addrAIn(busAddr[i]),
+                .wrEnAIn(busWrEn[i]),
+                .wrDataAIn(busWrData[i]),
+                .rdEnAIn(1'b0),
+                .addrBIn(rdAddr),
+                .wrEnBIn(WREN_ZERO),
+                .wrDataBIn(DATA_ZERO),
+                .rdEnBIn(dataRdEn5R[i]),
+                .rdDataBOut(rdData));
+                
+            assign dataB[DATA_WIDTH*i+:DATA_WIDTH] = rdData;
+            
         end
-    end
-           
-    always @(posedge clkIn) begin
-    
-    end
-    
-            if (rowSizeIn < VECTOR_SIZE) begin
-                maxRowIdxR      <= 0;
-                rowDoneR        <= 1;
-            else
-                maxRowIdxR      <= rowSizeIn - VECTOR_SIZE;
-                rowDoneR        <= 0;
-            end
-        end else begin
-            rowIdxR             <= rowIdxR + VECTOR_SIZE;
-            rowDoneR            <= 0;
-            if (rowIdxR >= maxRowIdxR) begin
-                rowIdxR         <= 0;
-                rowDoneR        <= 1;
-            end
-        end
-    end
-    
-    always @(posedge clkIn) begin
-        if (startR) begin
-            colIdx2R            <= 0;
-            maxColIdx2R         <= colSizeR - 1;
-            if ((colSizeR == 1) && rowDoneR) begin
-                colDone2R       <= 1;
-            else
-                colDone2R       <= 0;
-            end
-        end else begin
-            colDone2R           <= 0;
-            if (rowDone2R) begin
-                colIdx2R        <= colIdx2R + 1;
-                if (colIdx2R >= maxColIdx2R) begin
-                    colIdx2R    <= 0;
-                    colDone2R   <= 1;
-                end
-            end
-        end
-    end
-    
-    
-    colIdx2R * rowIdx2R
-    colIdxR     <= colIdxR + 1;
-    if (colIdxR >= maxColIdxR) begin
-        doneR   <= 1;
-    end
-    
-    addrR       <= colIdxR * rowSizeR + rowIdxR + baseAddrR;
-    
-    shift2R     <= addrR[SHIFT_HI:SHIFT_LO];
-    for (i = 0; i < VECTOR_SIZE; i = i + 1) begin
-        addr2R[i] <= addrR + i;
-    end
-    addr3R[i]     <= addr2R[i][ADDR_HI:ADDR_LO];
-    
-    addrR[i]    <= addrR
-    always @(posedge clkIn) begin
-        if (rstIn) begin
-        end else begin
-            wrEnR   <= 0;
-            wrDataR <= 0;
-            case (stateR)
-                // Pass-through for RISCV inputs
-                IDLE : begin
-                    addrR[i]    <= addrIn[ADDR_HI:ADDR_LO];
-                    wrEnR[i]    <= wr
-                    wrDataR[i]  <= wrDataIn[31:0];
-                    wrDataR[i+1]<= wrDataIn[63:32];
-                    filtRowsR   <= filtRowsIn;
-                    filtColsR   <= filtColsIn;
-                    dataRowsR   <= dataRowsIn;
-                    dataColsR   <= dataColsIn;
-                    if (startIn) begin
-                        stateR  <= RUN;
-                        // Error messages on user input
-                    end
-                end
-                RUN : begin
-                    if (colsRemainingR < vectorSize) begin
-                        lastR   <= 1;
-                    end
-                    for (i = 0; i < VECTOR_SIZE; i = i + 1) begin
-                        idxR    <= idxR + VECTOR_SIZE;
-                        
-                        colIdxR <= idxR % filtColsR;
-                        rowIdx  <= idxR / filtColsR;
-                        validR[i]   <= (colsRemainingR > i);
-                        if (filtColsR)
-                            
-                        else
-                            addrR[i] <= addrR[i] + VECTOR_SIZE;
-                        end
-                    end
-                    addrR       <= addrR + VECTOR_SIZE;
-                    rdEnR       <=
-                end
-            endcase;                
-        end
-    end
+    endgenerate
     
     // Multiply and Accumulate
-    multiply_and_accumulate #(.FRAC_WIDTH(FRAC_WIDTH), .EXP_WIDTH(EXP_WIDTH)) mac(
+    multiply_and_accumulate #(
+        .FRAC_WIDTH(FRAC_WIDTH),
+        .EXP_WIDTH(EXP_WIDTH)) mac(
         .clkIn(clkIn),
         .rstIn(rstIn),
         .dataAIn(dataA),
@@ -452,7 +363,9 @@ module cnn_hw_accelerator (
         .validOut(valid));
        
     // Output FIFO
-    fifo #(.DATA_WIDTH(DATA_WIDTH), .FIFO_SKID(128)) fifo_i(
+    fifo #(
+        .DATA_WIDTH(DATA_WIDTH),
+        .FIFO_SKID(128)) fifo_i(
         .clkIn(clkIn),
         .rstIn(rstIn),
         .wrDataIn(macData),
