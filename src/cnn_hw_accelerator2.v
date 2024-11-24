@@ -372,16 +372,16 @@ module cnn_hw_accelerator (
     end
     
     // RAM constants
-    localparam WREN_ZERO  = {VECTOR_SIZE{1'b0}};
-    localparam DATA_ZERO  = { DATA_WIDTH{1'b0}};
+    localparam WREN_ZERO  = {   VECTOR_SIZE{1'b0}};
+    localparam DATA_ZERO  = {RAM_DATA_WIDTH{1'b0}};
     localparam RD_LATENCY = 1;
        
     // RAM Bank A
-    wire [DATA_WIDTH-1:0] dataA [0:VECTOR_SIZE-1];
+    wire [  RAM_DATA_WIDTH-1:0] dataA [0:VECTOR_SIZE-1];
     wire [VECTOR_SIZE_LOG2-1:0] dataAShift;
     
     // RAM Bank B
-    wire [DATA_WIDTH-1:0] dataB [0:VECTOR_SIZE-1];
+    wire [  RAM_DATA_WIDTH-1:0] dataB [0:VECTOR_SIZE-1];
     wire [VECTOR_SIZE_LOG2-1:0] dataBShift;
     
     // Common RAM signals
@@ -393,12 +393,12 @@ module cnn_hw_accelerator (
         for (i = 0; i < VECTOR_SIZE; i = i + 1) begin
         
             wire [RAM_ADDR_WIDTH-1:0] rdAddr;
-            wire [DATA_WIDTH-1:0] rdData;
+            wire [RAM_DATA_WIDTH-1:0] rdData;
             
             assign rdAddr = dataAddr5R[i*RAM_ADDR_WIDTH+:RAM_ADDR_WIDTH];
             
             dp_ram #(
-                .DATA_WIDTH(DATA_WIDTH),
+                .DATA_WIDTH(RAM_DATA_WIDTH),
                 .RAM_DEPTH(RAM_DEPTH)) data_ram (
                 .clkIn(clkIn),
                 .rstIn(rstIn),
@@ -413,7 +413,7 @@ module cnn_hw_accelerator (
                 .rdDataBOut(rdData),
                 .rdAckBOut(valid[i]));
                 
-            assign dataA[DATA_WIDTH*i+:DATA_WIDTH] = rdData;
+            assign dataA[RAM_DATA_WIDTH*i+:RAM_DATA_WIDTH] = rdData;
             
         end
             
@@ -431,12 +431,12 @@ module cnn_hw_accelerator (
         for (i = 0; i < VECTOR_SIZE; i = i + 1) begin
         
             wire [RAM_ADDR_WIDTH-1:0] rdAddr;
-            wire [DATA_WIDTH-1:0] rdData;
+            wire [RAM_DATA_WIDTH-1:0] rdData;
             
             assign rdAddr = filtAddr[i*RAM_ADDR_WIDTH+:RAM_ADDR_WIDTH];
             
             dp_ram #(
-                .DATA_WIDTH(DATA_WIDTH),
+                .DATA_WIDTH(RAM_DATA_WIDTH),
                 .RAM_DEPTH(RAM_DEPTH)) filt_ram (
                 .clkIn(clkIn),
                 .rstIn(rstIn),
@@ -450,7 +450,7 @@ module cnn_hw_accelerator (
                 .rdEnBIn(dataRdEn5R[i]),
                 .rdDataBOut(rdData));
                 
-            assign dataB[DATA_WIDTH*i+:DATA_WIDTH] = rdData;
+            assign dataB[RAM_DATA_WIDTH*i+:RAM_DATA_WIDTH] = rdData;
             
         end
             
@@ -474,8 +474,8 @@ module cnn_hw_accelerator (
     
     // RAM Output Pipeline Stage
     reg [VECTOR_SIZE-1:0] validR;
-    reg [DATA_WIDTH*VECTOR_SIZE-1:0] dataAR;
-    reg [DATA_WIDTH*VECTOR_SIZE-1:0] dataBR;
+    reg [RAM_DATA_WIDTH*VECTOR_SIZE-1:0] dataAR;
+    reg [RAM_DATA_WIDTH*VECTOR_SIZE-1:0] dataBR;
     
     // Valid Process
     always @(posedge clkIn) begin
@@ -491,12 +491,12 @@ module cnn_hw_accelerator (
     always @(posedge clkIn) begin
         ramLastR    <= ramLast;
         // Circular shift
-        dataAR      <= (dataA >> (dataAShift*DATA_WIDTH)) | (dataA << ((VECTOR_SIZE - dataAShift)*DATA_WIDTH));
-        dataBR      <= (dataB >> (dataBShift*DATA_WIDTH)) | (dataB << ((VECTOR_SIZE - dataBShift)*DATA_WIDTH));
+        dataAR      <= (dataA >> (dataAShift*RAM_DATA_WIDTH)) | (dataA << ((VECTOR_SIZE - dataAShift)*RAM_DATA_WIDTH));
+        dataBR      <= (dataB >> (dataBShift*RAM_DATA_WIDTH)) | (dataB << ((VECTOR_SIZE - dataBShift)*RAM_DATA_WIDTH));
     end
     
     // Multiply and accumulate results
-    wire [DATA_WIDTH-1:0] macData;
+    wire [RAM_DATA_WIDTH-1:0] macData;
     wire macValid;
     
     // Multiply and Accumulate
@@ -514,7 +514,7 @@ module cnn_hw_accelerator (
        
     // Output FIFO
     fifo #(
-        .DATA_WIDTH(DATA_WIDTH),
+        .DATA_WIDTH(RAM_DATA_WIDTH),
         .FIFO_SKID(128)) fifo_i(
         .clkIn(clkIn),
         .rstIn(rstIn),
