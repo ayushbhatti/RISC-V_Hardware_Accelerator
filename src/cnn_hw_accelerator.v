@@ -128,7 +128,7 @@ module cnn_hw_accelerator (
         
         // Select only required bits of address
         always @(posedge clkIn) begin
-            busAddrR <= busAddr[RAM_DATA_WIDTH-1:0];
+            busAddrR <= busAddr[RAM_ADDR_WIDTH-1:0];
         end        
     endgenerate
     
