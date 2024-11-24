@@ -157,7 +157,7 @@ module cnn_hw_accelerator_tb;
                 end
                 FLOAD : begin
                     cntR            <= cntR + 1;
-                    wrDataR[cntR*DATA_WIDTH+:DATA_WIDTH] <= data;
+                    wrDataR[cntR*DATA_WIDTH+:DATA_WIDTH] <= filt;
                     for (i = 0; i < NUM_WORDS; i = i + 1) begin
                         if ((cntR == (NUM_WORDS - 1)) || filtLast) begin
                             cntR        <= 0;
