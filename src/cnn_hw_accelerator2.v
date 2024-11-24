@@ -218,18 +218,24 @@ module cnn_hw_accelerator (
     always @(posedge clkIn) begin
     
         // Pipeline #2
+        last2R   <= rowDoneR & colDoneR;
         addr2R   <= {rowCntR, VECTOR_SIZE_LOG2{1'b0}} * colCntR;
         offset2R <= {rowCntR, VECTOR_SIZE_LOG2{1'b0}} + baseCntR:
         rowCnt2R <= {rowCntR, VECTOR_SIZE_LOG2{1'b0}};
         
         // Pipeline #3
+        last3R      <= last2R;
         dataAddr3R  <= addr2R + offset2R;
         filtAddr3R  <= addr2R + rowCnt2R;
         
         // Pipeline #4
-        dataShift4R = dataAddr3R[(VECTOR_SIZE_LOG2-1):0];
-        filtShift4R = filtAddr3R[(VECTOR_SIZE_LOG2-1):0];
+        last4R      <= last3R;
         
+        // Determine shift required to access correct RAM bank
+        dataShift4R <= dataAddr3R[(VECTOR_SIZE_LOG2-1):0];
+        filtShift4R <= filtAddr3R[(VECTOR_SIZE_LOG2-1):0];
+        
+        // Determine addresses for each RAM bank
         for (i = 0; i < VECTOR_SIZE; i = i + 1) begin
             dataAddrVar  = dataAddr3R + i;
             filtAddrVar  = filtAddr3R + i;
@@ -239,9 +245,12 @@ module cnn_hw_accelerator (
         end
         
         // Pipeline #5
+        dataShift5R <= dataShift4R;
+        filtShift5R <= filtShift4R;
+        
         // Circular shift
-        dataAddr5R <= (dataAddr4R << (dataShift4R*RAM_ADDR_WIDTH)) | (dataAddr4R >> ((VECTOR_SIZE - dataShift4R)*RAM_ADDR_WIDTH));
-        filtAddr5R <= (filtAddr4R << (filtShift4R*RAM_ADDR_WIDTH)) | (filtAddr4R >> ((VECTOR_SIZE - filtShift4R)*RAM_ADDR_WIDTH));
+        dataAddr5R  <= (dataAddr4R << (dataShift4R*RAM_ADDR_WIDTH)) | (dataAddr4R >> ((VECTOR_SIZE - dataShift4R)*RAM_ADDR_WIDTH));
+        filtAddr5R  <= (filtAddr4R << (filtShift4R*RAM_ADDR_WIDTH)) | (filtAddr4R >> ((VECTOR_SIZE - filtShift4R)*RAM_ADDR_WIDTH));
     end
     
     reg [VECTOR_SIZE-1:0] rdEn2R;
@@ -287,8 +296,9 @@ module cnn_hw_accelerator (
         end
     end
     
-    localparam WREN_ZERO = {VECTOR_SIZE{1'b0}};
-    localparam DATA_ZERO = { DATA_WIDTH{1'b0}};
+    localparam WREN_ZERO  = {VECTOR_SIZE{1'b0}};
+    localparam DATA_ZERO  = { DATA_WIDTH{1'b0}};
+    localparam RD_LATENCY = 1;
                 
     // Generate Data RAM for each vector element
     generate
@@ -301,7 +311,7 @@ module cnn_hw_accelerator (
             
             dp_ram #(
                 .DATA_WIDTH(DATA_WIDTH),
-                .RAM_DEPTH(RAM_DEPTH)) data_ram_i(
+                .RAM_DEPTH(RAM_DEPTH)) data_ram (
                 .clkIn(clkIn),
                 .rstIn(rstIn),
                 .addrAIn(busAddr[i]),
@@ -317,6 +327,13 @@ module cnn_hw_accelerator (
                 
             assign dataA[DATA_WIDTH*i+:DATA_WIDTH] = rdData;
             
+            delay #(
+                .LATENCY(RD_LATENCY),
+                .DATA_WIDTH(VECTOR_SIZE_LOG2)) data_delay (
+                .clkIn(clkIn),
+                .rstIn(rstIn),
+                .dataIn(dataRdShift5R),
+                .dataOut(dataAShift));            
         end
     endgenerate
         
@@ -331,7 +348,7 @@ module cnn_hw_accelerator (
             
             dp_ram #(
                 .DATA_WIDTH(DATA_WIDTH),
-                .RAM_DEPTH(RAM_DEPTH)) data_ram_i(
+                .RAM_DEPTH(RAM_DEPTH)) filt_ram (
                 .clkIn(clkIn),
                 .rstIn(rstIn),
                 .addrAIn(busAddr[i]),
@@ -346,8 +363,32 @@ module cnn_hw_accelerator (
                 
             assign dataB[DATA_WIDTH*i+:DATA_WIDTH] = rdData;
             
+            delay #(
+                .LATENCY(RD_LATENCY),
+                .DATA_WIDTH(VECTOR_SIZE_LOG2)) filt_delay (
+                .clkIn(clkIn),
+                .rstIn(rstIn),
+                .dataIn(filtRdShift5R),
+                .dataOut(dataBShift)); 
         end
     endgenerate
+    
+    // Valid Process
+    always @(posedge clkIn) begin
+        if (rstIn) begin
+            validR  <= 0;
+        end else begin
+            // Circular shift
+            validR  <= (valid >> dataAShift) | (valid << (VECTOR_SIZE - dataAShift));            
+        end
+    end
+    
+    // Data Process
+    always @(posedge clkIn) begin
+        // Circular shift
+        dataAR  <= (dataA >> (dataAShift*DATA_WIDTH)) | (dataA << ((VECTOR_SIZE - dataAShift)*DATA_WIDTH));
+        dataBR  <= (dataB >> (dataBShift*DATA_WIDTH)) | (dataB << ((VECTOR_SIZE - dataBShift)*DATA_WIDTH));
+    end
     
     // Multiply and Accumulate
     multiply_and_accumulate #(
@@ -355,9 +396,9 @@ module cnn_hw_accelerator (
         .EXP_WIDTH(EXP_WIDTH)) mac(
         .clkIn(clkIn),
         .rstIn(rstIn),
-        .dataAIn(dataA),
-        .dataBIn(dataB),
-        .validIn(valid),
+        .dataAIn(dataAR),
+        .dataBIn(dataBR),
+        .validIn(validR),
         .lastIn(last),
         .dataOut(data),
         .validOut(valid));
