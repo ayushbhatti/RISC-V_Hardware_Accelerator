@@ -120,8 +120,25 @@ module cnn_hw_accelerator (
         end
     endgenerate
     
-    assign filtAdv = rowDoneR & colDoneR & fifoWrReady;
-
+    // Row Index Counter
+    wire rowAdv;
+    wire rowClr;
+    wire rowDoneR;
+    wire [CNT_WIDTH-1:0] rowCntR;
+    
+    // Column Index Counter
+    wire colAdv;
+    wire colClr;
+    wire colDoneR;
+    wire [CNT_WIDTH-1:0] colCntR;
+    
+    // Base Address Counter
+    wire baseAdv;
+    wire baseClr;
+    wire baseDoneR;
+    wire [CNT_WIDTH-1:0] baseCntR;
+    
+    // Counter control signals
     assign baseAdv = rowDoneR & colDoneR & fifoWrReady;
     assign baseClr = cntClrR & fifoWrReady;
     
@@ -131,6 +148,7 @@ module cnn_hw_accelerator (
     assign rowAdv  = 1;
     assign rowClr  = colClr | (colAdv & !colClr);
     
+    // Row Index Counter
     counter #(
         .CNT_WIDTH(CNT_WIDTH)) row_cnt (
         .clkIn(clkIn),
@@ -140,7 +158,8 @@ module cnn_hw_accelerator (
         .endValIn(maxRowCntR),
         .cntOut(rowCntR),
         .doneOut(rowDoneR));
-        
+       
+    // Column Index Counter
     counter #(
         .CNT_WIDTH(CNT_WIDTH)) col_cnt (
         .clkIn(clkIn),
@@ -150,7 +169,8 @@ module cnn_hw_accelerator (
         .endValIn(maxColCntR),
         .cntOut(colCntR),
         .doneOut(colDoneR));
-        
+      
+    // Base Address Counter
     counter #(
         .CNT_WIDTH(CNT_WIDTH)) base_cnt (
         .clkIn(clkIn),
@@ -160,7 +180,8 @@ module cnn_hw_accelerator (
         .endValIn(maxAddrR),
         .cntOut(baseCntR),
         .doneOut(baseDoneR));
-        
+    
+    // Done signal for 2D Convolution 
     assign done = rowDoneR & colDoneR & baseDoneR;
     
     always @(posedge clkIn) begin
@@ -408,6 +429,7 @@ module cnn_hw_accelerator (
         end
     end
     
+    // Multiply and Accumulate
     multiply_and_accumulate #(.FRAC_WIDTH(FRAC_WIDTH), .EXP_WIDTH(EXP_WIDTH)) mac(
         .clkIn(clkIn),
         .rstIn(rstIn),
@@ -418,6 +440,7 @@ module cnn_hw_accelerator (
         .dataOut(data),
         .validOut(valid));
        
+    // Output FIFO
     fifo #(.DATA_WIDTH(DATA_WIDTH), .FIFO_SKID(128)) fifo_i(
         .clkIn(clkIn),
         .rstIn(rstIn),
