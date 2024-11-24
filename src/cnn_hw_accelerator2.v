@@ -16,7 +16,6 @@ module cnn_hw_accelerator (
     // Configuration of RISCV bus interface
     parameter BUS_ADDR_WIDTH    = 32;
     parameter BUS_DATA_WIDTH    = 64;
-    parameter BUS_WE_WIDTH      = BUS_DATA_WIDTH/8;
     
     // Floating-point hardware accelerator configuration
     // Standard single precision
@@ -26,11 +25,15 @@ module cnn_hw_accelerator (
     // Multiply and accumulate input width
     parameter VECTOR_SIZE       = 8;
     
-    // Maximum size of input matrices (in elements)
+    // Maximum size of input matrices
+    // < Max Rows > * < Max Cols >
     parameter MAX_SIZE          = 4096;
 
-    // Derived counter width
-    parameter CNT_WIDTH         = $clog2(MAX_SIZE);
+    // Derived RISCV bus parameters
+    localparam BUS_WE_WIDTH     = BUS_DATA_WIDTH/8;
+    
+    // Derived counter parameters
+    localparam CNT_WIDTH        = $clog2(MAX_SIZE);
 
     // Derived vector size parameters
     localparam VECTOR_SIZE_LOG2 = $clog2(VECTOR_SIZE);
