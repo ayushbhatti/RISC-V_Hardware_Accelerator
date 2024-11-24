@@ -65,6 +65,7 @@ module cnn_hw_accelerator (
     
     wire fifoWrReady;
     
+    // 
     genvar i;
     generate
         
@@ -245,6 +246,7 @@ module cnn_hw_accelerator (
         end
         
         // Pipeline #5
+        last5R      <= last4R;
         dataShift5R <= dataShift4R;
         filtShift5R <= filtShift4R;
         
@@ -331,7 +333,7 @@ module cnn_hw_accelerator (
                 .LATENCY(RD_LATENCY),
                 .DATA_WIDTH(VECTOR_SIZE_LOG2)) data_delay (
                 .clkIn(clkIn),
-                .rstIn(rstIn),
+                .rstIn(1'b0),
                 .dataIn(dataRdShift5R),
                 .dataOut(dataAShift));            
         end
@@ -367,11 +369,24 @@ module cnn_hw_accelerator (
                 .LATENCY(RD_LATENCY),
                 .DATA_WIDTH(VECTOR_SIZE_LOG2)) filt_delay (
                 .clkIn(clkIn),
-                .rstIn(rstIn),
+                .rstIn(1'b0),
                 .dataIn(filtRdShift5R),
                 .dataOut(dataBShift)); 
         end
     endgenerate
+    
+    // Delay last signal to match reads from RAM
+    delay #(
+        .LATENCY(RD_LATENCY+1),
+        .DATA_WIDTH(1)) last_delay (
+        .clkIn(clkIn),
+        .rstIn(1'b0),
+        .dataIn(last5R),
+        .dataOut(ramLast));
+                
+    reg [VECTOR_SIZE-1:0] validR;
+    reg [DATA_WIDTH*VECTOR_SIZE-1:0] dataAR;
+    reg [DATA_WIDTH*VECTOR_SIZE-1:0] dataBR;
     
     // Valid Process
     always @(posedge clkIn) begin
@@ -385,10 +400,14 @@ module cnn_hw_accelerator (
     
     // Data Process
     always @(posedge clkIn) begin
+        ramLastR    <= ramLast;
         // Circular shift
-        dataAR  <= (dataA >> (dataAShift*DATA_WIDTH)) | (dataA << ((VECTOR_SIZE - dataAShift)*DATA_WIDTH));
-        dataBR  <= (dataB >> (dataBShift*DATA_WIDTH)) | (dataB << ((VECTOR_SIZE - dataBShift)*DATA_WIDTH));
+        dataAR      <= (dataA >> (dataAShift*DATA_WIDTH)) | (dataA << ((VECTOR_SIZE - dataAShift)*DATA_WIDTH));
+        dataBR      <= (dataB >> (dataBShift*DATA_WIDTH)) | (dataB << ((VECTOR_SIZE - dataBShift)*DATA_WIDTH));
     end
+    
+    wire [DATA_WIDTH-1:0] macData;
+    wire macValid;
     
     // Multiply and Accumulate
     multiply_and_accumulate #(
@@ -399,9 +418,9 @@ module cnn_hw_accelerator (
         .dataAIn(dataAR),
         .dataBIn(dataBR),
         .validIn(validR),
-        .lastIn(last),
-        .dataOut(data),
-        .validOut(valid));
+        .lastIn(ramLastR),
+        .dataOut(macData),
+        .validOut(macValid));
        
     // Output FIFO
     fifo #(
