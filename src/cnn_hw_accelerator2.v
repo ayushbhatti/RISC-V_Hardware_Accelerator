@@ -156,7 +156,7 @@ module cnn_hw_accelerator (
     wire filtColAdv;
     wire filtColClr;
     wire filtColDoneR;
-    wire [COL_CNT_WIDTH-1:0] filtColCntR;
+    wire [FILT_COL_CNT_WIDTH-1:0] filtColCntR;
     
     // Filter Row Counter
     wire filtRowAdv;
@@ -182,14 +182,15 @@ module cnn_hw_accelerator (
     // Read state machine
     always @(posedge clkIn) begin
         if (rstIn) begin
-            stateR      <= IDLE;
-            validR      <= 0;
-            lastRdCntR  <= 0;
-            maxColCntR  <= 0;
-            maxRowCntR  <= 0;
-            maxBaseCntR <= 0;
-            filtColsR   <= 0;
-            dataColsR   <= 0;
+            stateR          <= IDLE;
+            validR          <= 0;
+            lastRdCntR      <= 0;
+            maxFiltColCntR  <= 0;
+            maxFiltRowCntR  <= 0;
+            maxDataColCntR  <= 0;
+            maxDataRowCntR  <= 0;
+            filtColsR       <= 0;
+            dataColsR       <= 0;
         end else begin
             case (stateR)
                 IDLE : begin
@@ -230,7 +231,7 @@ module cnn_hw_accelerator (
        
     // Filter Column Index Counter
     counter #(
-        .CNT_WIDTH(COL_CNT_WIDTH)) filt_col_cnt (
+        .CNT_WIDTH(FILT_COL_CNT_WIDTH)) filt_col_cnt (
         .clkIn(clkIn),
         .rstIn(1'b0),
         .clrIn(filtColClr),
@@ -277,21 +278,20 @@ module cnn_hw_accelerator (
     
     // Pipeline #2
     reg last2R;
-    reg [CNT_WIDTH-1:0] addr2R;
-    reg [CNT_WIDTH-1:0] offset2R;
-    reg [CNT_WIDTH-1:0] colCnt2R;
+    reg [CNT_WIDTH:0] dataCols2R;
+    reg [CNT_WIDTH-1:0] dataRowCnt2R;
+    reg [CNT_WIDTH-1:0] dataColCnt2R;
+    reg [CNT_WIDTH-1:0] filtRowAddr2R;
+    reg [CNT_WIDTH-1:0] filtColAddr2R;
     
     // Pipeline #3
     reg last3R;
-    reg [CNT_WIDTH-1:0] dataAddr3R;
+    reg [CNT_WIDTH-1:0] dataRowAddr3R;
+    reg [CNT_WIDTH-1:0] dataColAddr3R;
     reg [CNT_WIDTH-1:0] filtAddr3R;
     
     // Pipeline #4
     reg last4R;
-    reg [VECTOR_SIZE_LOG2-1:0] dataShift4R;
-    reg [VECTOR_SIZE_LOG2-1:0] filtShift4R;
-    reg [CNT_WIDTH-1:0] dataAddrVar;
-    reg [CNT_WIDTH-1:0] filtAddrVar;
     reg [CNT_WIDTH-1:0] dataAddr4R;
     reg [CNT_WIDTH-1:0] filtAddr4R;
     
@@ -299,48 +299,64 @@ module cnn_hw_accelerator (
     reg last5R;
     reg [VECTOR_SIZE_LOG2-1:0] dataShift5R;
     reg [VECTOR_SIZE_LOG2-1:0] filtShift5R;
-    reg [CNT_WIDTH-1:0] dataAddr5R;
-    reg [CNT_WIDTH-1:0] filtAddr5R;
+    reg [CNT_WIDTH-1:0] dataAddrVar;
+    reg [CNT_WIDTH-1:0] filtAddrVar;
+    reg [RAM_ADDR_WIDTH*VECTOR_SIZE-1:0] dataAddr5R;
+    reg [RAM_ADDR_WIDTH*VECTOR_SIZE-1:0] filtAddr5R;
+    
+    // Pipeline #6
+    reg last6R;
+    reg [VECTOR_SIZE_LOG2-1:0] dataShift6R;
+    reg [VECTOR_SIZE_LOG2-1:0] filtShift6R;
+    reg [RAM_ADDR_WIDTH*VECTOR_SIZE-1:0] dataAddr6R;
+    reg [RAM_ADDR_WIDTH*VECTOR_SIZE-1:0] filtAddr6R;
     
     // Data Process
     always @(posedge clkIn) begin
     
         // Pipeline #2
         last2R        <= filtColDoneR & filtRowDoneR;
-        dataRowAddr2R <= dataRowCntR * dataColsR;
+        dataCols2R    <= dataColsR;
+        dataRowCnt2R  <= dataRowCntR + filtRowCntR;
+        dataColCnt2R  <= dataColCntR + {filtColCntR, {FILT_COL_CNT_LO{1'b0}}};
         filtRowAddr2R <= filtRowCntR * filtColsR;
-        dataColAddr2R <= dataColCntR;
         filtColAddr2R <= {filtColCntR, {FILT_COL_CNT_LO{1'b0}}};
         
         // Pipeline #3
-        last3R      <= last2R;
-        dataAddr3R  <= dataRowAddr2R + dataColAddr2R;
-        filtAddr3R  <= filtRowAddr2R + filtColAddr2R;
+        last3R        <= last2R;
+        dataRowAddr3R <= dataRowCnt2R * dataCols2R;
+        dataColAddr3R <= dataColCnt2R;
+        filtAddr3R    <= filtRowAddr2R + filtColAddr2R;
         
         // Pipeline #4
-        last4R      <= last3R;
+        last4R        <= last3R;
+        dataAddr4R    <= dataRowAddr3R + dataColAddr3R;
+        filtAddr4R    <= filtAddr3R;
         
+        // Pipeline #5
+        last5R        <= last4R;
+
         // Determine shift required to access correct RAM bank
-        dataShift4R <= dataAddr3R[(VECTOR_SIZE_LOG2-1):0];
-        filtShift4R <= filtAddr3R[(VECTOR_SIZE_LOG2-1):0];
+        dataShift5R   <= dataAddr4R[(VECTOR_SIZE_LOG2-1):0];
+        filtShift5R   <= filtAddr4R[(VECTOR_SIZE_LOG2-1):0];
         
         // Determine addresses for each RAM bank
         for (j = 0; j < VECTOR_SIZE; j = j + 1) begin
-            dataAddrVar  = dataAddr3R + j;
-            filtAddrVar  = filtAddr3R + j;
+            dataAddrVar  = dataAddr4R + j;
+            filtAddrVar  = filtAddr4R + j;
             
-            dataAddr4R[(j*RAM_ADDR_WIDTH)+:RAM_ADDR_WIDTH] <= dataAddrVar[VECTOR_SIZE_LOG2+:RAM_ADDR_WIDTH];            
-            filtAddr4R[(j*RAM_ADDR_WIDTH)+:RAM_ADDR_WIDTH] <= filtAddrVar[VECTOR_SIZE_LOG2+:RAM_ADDR_WIDTH];
+            dataAddr5R[(j*RAM_ADDR_WIDTH)+:RAM_ADDR_WIDTH] <= dataAddrVar[VECTOR_SIZE_LOG2+:RAM_ADDR_WIDTH];            
+            filtAddr5R[(j*RAM_ADDR_WIDTH)+:RAM_ADDR_WIDTH] <= filtAddrVar[VECTOR_SIZE_LOG2+:RAM_ADDR_WIDTH];
         end
         
-        // Pipeline #5
-        last5R      <= last4R;
-        dataShift5R <= dataShift4R;
-        filtShift5R <= filtShift4R;
+        // Pipeline #6
+        last6R      <= last5R;
+        dataShift6R <= dataShift5R;
+        filtShift6R <= filtShift5R;
         
         // Circular shift
-        dataAddr5R  <= (dataAddr4R << (dataShift4R*RAM_ADDR_WIDTH)) | (dataAddr4R >> ((VECTOR_SIZE - dataShift4R)*RAM_ADDR_WIDTH));
-        filtAddr5R  <= (filtAddr4R << (filtShift4R*RAM_ADDR_WIDTH)) | (filtAddr4R >> ((VECTOR_SIZE - filtShift4R)*RAM_ADDR_WIDTH));
+        dataAddr6R  <= (dataAddr5R << (dataShift5R*RAM_ADDR_WIDTH)) | (dataAddr5R >> ((VECTOR_SIZE - dataShift5R)*RAM_ADDR_WIDTH));
+        filtAddr6R  <= (filtAddr5R << (filtShift5R*RAM_ADDR_WIDTH)) | (filtAddr5R >> ((VECTOR_SIZE - filtShift5R)*RAM_ADDR_WIDTH));
     end
     
     // Pipeline #2
@@ -354,8 +370,11 @@ module cnn_hw_accelerator (
     reg [VECTOR_SIZE-1:0] rdEn4R;
     
     // Pipeline #5
-    reg [VECTOR_SIZE-1:0] dataRdEn5R;
-    reg [VECTOR_SIZE-1:0] filtRdEn5R;
+    reg [VECTOR_SIZE-1:0] rdEn5R;
+    
+    // Pipeline #6
+    reg [VECTOR_SIZE-1:0] dataRdEn6R;
+    reg [VECTOR_SIZE-1:0] filtRdEn6R;
     
     // Read Enable Process
     always @(posedge clkIn) begin
@@ -364,16 +383,17 @@ module cnn_hw_accelerator (
             rdEn2R      <= 0;
             rdEn3R      <= 0;
             rdEn4R      <= 0;
-            dataRdEn5R  <= 0;
-            filtRdEn5R  <= 0;
+            rdEn5R      <= 0;
+            dataRdEn6R  <= 0;
+            filtRdEn6R  <= 0;
         end else begin
         
             // Pipeline #2
-            valid2R     <= validR & !(rowDoneR & colDoneR & !fifoWrReady);
+            valid2R     <= validR & !(filtColDoneR & filtRowDoneR & !fifoWrReady);
             
             // Determine which bits of read enable are high
             for (j = 0; j < VECTOR_SIZE; j = j + 1) begin
-                if (rowDoneR) begin
+                if (filtColDoneR) begin
                     if (j < lastRdCntR) begin
                         rdEn2R[j] <= 1;
                     end else begin
@@ -395,9 +415,12 @@ module cnn_hw_accelerator (
             rdEn4R      <= rdEn3R;
             
             // Pipeline #5
+            rdEn5R      <= rdEn4R;
+            
+            // Pipeline #6
             // Circular shift
-            dataRdEn5R  <= (rdEn4R << dataShift4R) | (rdEn4R >> (VECTOR_SIZE - dataShift4R));
-            filtRdEn5R  <= (rdEn4R << filtShift4R) | (rdEn4R >> (VECTOR_SIZE - filtShift4R));
+            dataRdEn6R  <= (rdEn5R << dataShift5R) | (rdEn5R >> (VECTOR_SIZE - dataShift5R));
+            filtRdEn6R  <= (rdEn5R << filtShift5R) | (rdEn5R >> (VECTOR_SIZE - filtShift5R));
         end
     end
     
@@ -425,7 +448,7 @@ module cnn_hw_accelerator (
             wire [RAM_ADDR_WIDTH-1:0] rdAddr;
             wire [RAM_DATA_WIDTH-1:0] rdData;
             
-            assign rdAddr = dataAddr5R[i*RAM_ADDR_WIDTH+:RAM_ADDR_WIDTH];
+            assign rdAddr = dataAddr6R[i*RAM_ADDR_WIDTH+:RAM_ADDR_WIDTH];
             
             dp_ram #(
                 .DATA_WIDTH(RAM_DATA_WIDTH),
@@ -439,7 +462,7 @@ module cnn_hw_accelerator (
                 .addrBIn(rdAddr),
                 .wrEnBIn(WREN_ZERO),
                 .wrDataBIn(DATA_ZERO),
-                .rdEnBIn(dataRdEn5R[i]),
+                .rdEnBIn(dataRdEn6R[i]),
                 .rdDataBOut(rdData),
                 .rdAckBOut(ramValid[i]));
                 
@@ -452,7 +475,7 @@ module cnn_hw_accelerator (
             .DATA_WIDTH(VECTOR_SIZE_LOG2)) data_delay (
             .clkIn(clkIn),
             .rstIn(1'b0),
-            .dataIn(dataRdShift5R),
+            .dataIn(dataRdShift6R),
             .dataOut(dataAShift)); 
     endgenerate
         
@@ -463,7 +486,7 @@ module cnn_hw_accelerator (
             wire [RAM_ADDR_WIDTH-1:0] rdAddr;
             wire [RAM_DATA_WIDTH-1:0] rdData;
             
-            assign rdAddr = filtAddr5R[i*RAM_ADDR_WIDTH+:RAM_ADDR_WIDTH];
+            assign rdAddr = filtAddr6R[i*RAM_ADDR_WIDTH+:RAM_ADDR_WIDTH];
             
             dp_ram #(
                 .DATA_WIDTH(RAM_DATA_WIDTH),
@@ -477,7 +500,7 @@ module cnn_hw_accelerator (
                 .addrBIn(rdAddr),
                 .wrEnBIn(WREN_ZERO),
                 .wrDataBIn(DATA_ZERO),
-                .rdEnBIn(dataRdEn5R[i]),
+                .rdEnBIn(dataRdEn6R[i]),
                 .rdDataBOut(rdData));
                 
             assign dataB[RAM_DATA_WIDTH*i+:RAM_DATA_WIDTH] = rdData;
@@ -489,7 +512,7 @@ module cnn_hw_accelerator (
             .DATA_WIDTH(VECTOR_SIZE_LOG2)) filt_delay (
             .clkIn(clkIn),
             .rstIn(1'b0),
-            .dataIn(filtRdShift5R),
+            .dataIn(filtRdShift6R),
             .dataOut(dataBShift)); 
     endgenerate
     
@@ -499,7 +522,7 @@ module cnn_hw_accelerator (
         .DATA_WIDTH(1)) last_delay (
         .clkIn(clkIn),
         .rstIn(1'b0),
-        .dataIn(last5R),
+        .dataIn(last6R),
         .dataOut(ramLast));
     
     // RAM Output Pipeline Stage
