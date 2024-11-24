@@ -22,12 +22,14 @@ module floating_point_add_tb;
     file_driver #(.FILE_NAME("input_a.txt")) driver_a (
         .clkIn(clk),
         .rstIn(rst),
+        .readyIn(1'b1),
         .dataOut(dataA),
         .validOut(valid));
         
     file_driver #(.FILE_NAME("input_b.txt")) driver_b (
         .clkIn(clk),
         .rstIn(rst),
+        .readyIn(1'b1),
         .dataOut(dataB));
     
     floating_point_add add (

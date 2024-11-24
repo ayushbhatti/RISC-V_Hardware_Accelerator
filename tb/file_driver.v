@@ -1,6 +1,7 @@
 module file_driver (
     clkIn,
     rstIn,
+    readyIn,
     dataOut,
     validOut,
     lastOut);
@@ -10,6 +11,7 @@ module file_driver (
     parameter FILE_NAME   = "input.txt";
     
     input clkIn, rstIn;
+    input readyIn;
     output [DATA_WIDTH*VECTOR_SIZE-1:0] dataOut;
     output [VECTOR_SIZE-1:0] validOut;
     output lastOut;
@@ -39,17 +41,19 @@ module file_driver (
             data2R  <= 0;
             valid2R <= 0;
         end else begin
-            dataR  <= 0;
-            validR <= 0;
-            for (i = 0; i < VECTOR_SIZE; i = i + 1) begin
-                if (!$feof(inputFile)) begin
-                    $fscanf(inputFile, "%h\n", fileData);
-                    dataR[DATA_WIDTH*i +: DATA_WIDTH]   <= fileData;
-                    validR[i]                           <= 1;
+            if (!valid2R || readyIn) begin
+                dataR  <= 0;
+                validR <= 0;
+                for (i = 0; i < VECTOR_SIZE; i = i + 1) begin
+                    if (!$feof(inputFile)) begin
+                        $fscanf(inputFile, "%h\n", fileData);
+                        dataR[DATA_WIDTH*i +: DATA_WIDTH]   <= fileData;
+                        validR[i]                           <= 1;
+                    end
                 end
+                data2R  <= dataR;
+                valid2R <= validR;
             end
-            data2R  <= dataR;
-            valid2R <= validR;
         end
     end
     
