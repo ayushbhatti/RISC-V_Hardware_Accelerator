@@ -265,13 +265,15 @@ module cnn_hw_accelerator (
         filtAddr5R <= (filtAddr4R << (filtShift4R*RAM_ADDR_WIDTH)) | (filtAddr4R >> ((VECTOR_SIZE - filtShift4R)*RAM_ADDR_WIDTH));
     end
     
+    // Determine read enable signals
     always @(posedge clkIn) begin
         if (rstIn) begin
             dataRdEn5R <= 0;
             filtRdEn5R <= 0;
         end else begin
-            dataRdEn5R <= (rdEn4R << dataShift) | (rdEn4R >> (VECTOR_SIZE - dataShift));
-            filtRdEn5R <= (rdEn4R << filtShift) | (rdEn4R >> (VECTOR_SIZE - filtShift));
+            // Circular shift
+            dataRdEn5R <= (rdEn4R << dataShift4R) | (rdEn4R >> (VECTOR_SIZE - dataShift4R));
+            filtRdEn5R <= (rdEn4R << filtShift4R) | (rdEn4R >> (VECTOR_SIZE - filtShift4R));
         end
     end
     
