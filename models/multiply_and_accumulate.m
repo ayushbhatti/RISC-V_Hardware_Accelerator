@@ -35,10 +35,10 @@ function res = multiply_and_accumulate(a,b)
 
     % Accumulator
     addLatency = 13;
-    if mod(length(a), addLatency) == 0
+    if mod(length(adderTreeOutput), addLatency) == 0
         padSize = 0;
     else
-        padSize = addLatency - mod(length(a), addLatency);
+        padSize = addLatency - mod(length(adderTreeOutput), addLatency);
     end
     adderTreeOutput = [adderTreeOutput, zeros(1,padSize,'single')];
     adderTreeOutput = reshape(adderTreeOutput,addLatency,[]);

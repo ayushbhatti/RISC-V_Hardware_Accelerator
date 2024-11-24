@@ -20,6 +20,7 @@ module counter (
     output [CNT_WIDTH-1:0] cntOut;
     
     reg doneR;
+    reg [CNT_WIDTH-1:0] nextCntVar;
     reg [CNT_WIDTH-1:0] cntR;
         
     always @(posedge clkIn) begin
