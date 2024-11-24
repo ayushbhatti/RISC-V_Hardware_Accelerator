@@ -1,16 +1,16 @@
 module cnn_hw_accelerator (
-    clkIn;
-    rstIn;
-    startIn;
-    filtRowsIn;
-    filtColsIn;
-    dataRowsIn;
-    dataColsIn;
-    addrIn;
-    wrEnIn;
-    wrDataIn;
-    readyIn;
-    validOut;
+    clkIn,
+    rstIn,
+    startIn,
+    filtRowsIn,
+    filtColsIn,
+    dataRowsIn,
+    dataColsIn,
+    addrIn,
+    wrEnIn,
+    wrDataIn,
+    readyIn,
+    validOut,
     dataOut);
 
     // Configuration of RISCV bus interface
@@ -61,25 +61,26 @@ module cnn_hw_accelerator (
     
     // Bus write registers
     reg [RAM_ADDR_WIDTH-1:0] busAddrR;
-    reg [RAM_DATA_WIDTH-1:0] busDataR [0:VECTOR_SIZE-1];
+    reg [RAM_DATA_WIDTH-1:0] busWrDataR [0:VECTOR_SIZE-1];
     reg [  RAM_WE_WIDTH-1:0] busWrEnR [0:1][0:VECTOR_SIZE-1];
     
     // Map Bus Writes to Correct RAM Banks
     genvar i;
+    integer j;
     generate
     
         // Constants for selecting relevant bits of address
         localparam NUM_BYTES    = RAM_WE_WIDTH*VECTOR_SIZE;
         localparam ADDR_LO      = $clog2(NUM_BYTES);
-        localparam ADDR_HI      = RAM_ADDR_WIDTH + ADRR_LO;
+        localparam ADDR_HI      = RAM_ADDR_WIDTH + ADDR_LO;
 
         // Constant for selecting write select bits
         localparam WR_SEL_LO    = RAM_WE_WIDTH;
         localparam WR_SEL_HI    = WR_SEL_LO + VECTOR_SIZE - 1;
         
         // Constants for mapping write enable bits
-        localparam GROUP_SIZE   = BUS_WE_WIDTH/RAM_WE_WIDTH
-        localparam NUM_GROUPS   = NUM_BYTES/BUS_WE_WIDTH
+        localparam GROUP_SIZE   = BUS_WE_WIDTH/RAM_WE_WIDTH;
+        localparam NUM_GROUPS   = NUM_BYTES/BUS_WE_WIDTH;
     
         // Extract address and write select bits
         wire [RAM_ADDR_WIDTH:0] busAddr;
@@ -108,7 +109,6 @@ module cnn_hw_accelerator (
             assign busWrEn   = wrEnIn  [  WE_HI:WE_LO  ];
 
             // Map writes to correct set of write enable bits
-            integer j;
             always @(posedge clkIn) begin
                 busWrDataR[i] <= busWrData;
                 for (j = 0; j < 2; j = j + 1) begin
@@ -122,7 +122,7 @@ module cnn_hw_accelerator (
         
         // Select only required bits of address
         always @(posedge clkIn) begin
-            busWrAddrR <= busWrAddr[RAM_DATA_WIDTH-1:0];
+            busAddrR <= busAddr[RAM_DATA_WIDTH-1:0];
         end        
     endgenerate
     
@@ -286,9 +286,9 @@ module cnn_hw_accelerator (
     
         // Pipeline #2
         last2R   <= colDoneR & rowDoneR;
-        addr2R   <= {colCntR, COL_CNT_LO{1'b0}} * rowCntR;
-        offset2R <= {colCntR, COL_CNT_LO{1'b0}} + baseCntR:
-        colCnt2R <= {colCntR, COL_CNT_LO{1'b0}};
+        addr2R   <= {colCntR, {COL_CNT_LO{1'b0}}} * rowCntR;
+        offset2R <= {colCntR, {COL_CNT_LO{1'b0}}} + baseCntR;
+        colCnt2R <= {colCntR, {COL_CNT_LO{1'b0}}};
         
         // Pipeline #3
         last3R      <= last2R;
@@ -303,12 +303,12 @@ module cnn_hw_accelerator (
         filtShift4R <= filtAddr3R[(VECTOR_SIZE_LOG2-1):0];
         
         // Determine addresses for each RAM bank
-        for (i = 0; i < VECTOR_SIZE; i = i + 1) begin
-            dataAddrVar  = dataAddr3R + i;
-            filtAddrVar  = filtAddr3R + i;
+        for (j = 0; j < VECTOR_SIZE; j = j + 1) begin
+            dataAddrVar  = dataAddr3R + j;
+            filtAddrVar  = filtAddr3R + j;
             
-            dataAddr4R[(i*RAM_ADDR_WIDTH)+:RAM_ADDR_WIDTH] <= dataAddrVar[VECTOR_SIZE_LOG2+:RAM_ADDR_WIDTH];            
-            filtAddr4R[(i*RAM_ADDR_WIDTH)+:RAM_ADDR_WIDTH] <= filtAddrVar[VECTOR_SIZE_LOG2+:RAM_ADDR_WIDTH];
+            dataAddr4R[(j*RAM_ADDR_WIDTH)+:RAM_ADDR_WIDTH] <= dataAddrVar[VECTOR_SIZE_LOG2+:RAM_ADDR_WIDTH];            
+            filtAddr4R[(j*RAM_ADDR_WIDTH)+:RAM_ADDR_WIDTH] <= filtAddrVar[VECTOR_SIZE_LOG2+:RAM_ADDR_WIDTH];
         end
         
         // Pipeline #5
@@ -346,15 +346,15 @@ module cnn_hw_accelerator (
         
             // Pipeline #2
             // Determine which bits of read enable are high
-            for (i = 0; i < VECTOR_SIZE; i = i + 1) begin
+            for (j = 0; j < VECTOR_SIZE; j = j + 1) begin
                 if (rowDoneR) begin
-                    if (i < lastRdCntR) begin
-                        rdEn2R[i] <= validR;
+                    if (j < lastRdCntR) begin
+                        rdEn2R[j] <= validR;
                     end else begin
-                        rdEn2R[i] <= 0;
+                        rdEn2R[j] <= 0;
                     end
                 end else begin
-                    rdEn2R[i] <= validR;
+                    rdEn2R[j] <= validR;
                 end
             end
             
@@ -377,15 +377,15 @@ module cnn_hw_accelerator (
     localparam RD_LATENCY = 1;
        
     // RAM Bank A
-    wire [  RAM_DATA_WIDTH-1:0] dataA [0:VECTOR_SIZE-1];
+    wire [RAM_DATA_WIDTH*VECTOR_SIZE-1:0] dataA;
     wire [VECTOR_SIZE_LOG2-1:0] dataAShift;
     
     // RAM Bank B
-    wire [  RAM_DATA_WIDTH-1:0] dataB [0:VECTOR_SIZE-1];
+    wire [RAM_DATA_WIDTH*VECTOR_SIZE-1:0] dataB;
     wire [VECTOR_SIZE_LOG2-1:0] dataBShift;
     
     // Common RAM signals
-    wire [VECTOR_SIZE-1:0] valid;
+    wire [VECTOR_SIZE-1:0] ramValid;
     wire ramLast;
     
     // Generate Data RAM for each vector element
@@ -411,7 +411,7 @@ module cnn_hw_accelerator (
                 .wrDataBIn(DATA_ZERO),
                 .rdEnBIn(dataRdEn5R[i]),
                 .rdDataBOut(rdData),
-                .rdAckBOut(valid[i]));
+                .rdAckBOut(ramValid[i]));
                 
             assign dataA[RAM_DATA_WIDTH*i+:RAM_DATA_WIDTH] = rdData;
             
@@ -433,7 +433,7 @@ module cnn_hw_accelerator (
             wire [RAM_ADDR_WIDTH-1:0] rdAddr;
             wire [RAM_DATA_WIDTH-1:0] rdData;
             
-            assign rdAddr = filtAddr[i*RAM_ADDR_WIDTH+:RAM_ADDR_WIDTH];
+            assign rdAddr = filtAddr5R[i*RAM_ADDR_WIDTH+:RAM_ADDR_WIDTH];
             
             dp_ram #(
                 .DATA_WIDTH(RAM_DATA_WIDTH),
@@ -473,17 +473,18 @@ module cnn_hw_accelerator (
         .dataOut(ramLast));
     
     // RAM Output Pipeline Stage
-    reg [VECTOR_SIZE-1:0] validR;
+    reg ramLastR;
+    reg [VECTOR_SIZE-1:0] ramValidR;
     reg [RAM_DATA_WIDTH*VECTOR_SIZE-1:0] dataAR;
     reg [RAM_DATA_WIDTH*VECTOR_SIZE-1:0] dataBR;
     
     // Valid Process
     always @(posedge clkIn) begin
         if (rstIn) begin
-            validR  <= 0;
+            ramValidR  <= 0;
         end else begin
             // Circular shift
-            validR  <= (valid >> dataAShift) | (valid << (VECTOR_SIZE - dataAShift));            
+            ramValidR  <= (ramValid >> dataAShift) | (ramValid << (VECTOR_SIZE - dataAShift));            
         end
     end
     
@@ -507,7 +508,7 @@ module cnn_hw_accelerator (
         .rstIn(rstIn),
         .dataAIn(dataAR),
         .dataBIn(dataBR),
-        .validIn(validR),
+        .validIn(ramValidR),
         .lastIn(ramLastR),
         .dataOut(macData),
         .validOut(macValid));
@@ -523,6 +524,6 @@ module cnn_hw_accelerator (
         .wrReadyOut(fifoWrReady),
         .rdDataOut(dataOut),
         .rdValidOut(validOut),
-        .rdReadyIn(readyIn);
+        .rdReadyIn(readyIn));
     
 endmodule
