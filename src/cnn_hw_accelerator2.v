@@ -131,51 +131,53 @@ module cnn_hw_accelerator (
     
     // State Definitions
     localparam IDLE = 0;
-    localparam INIT = 1;
-    localparam CALC = 2;
+    localparam CALC = 1;
     
     // Parameters for selecting subregions of column counts
-    localparam COL_CNT_WIDTH = CNT_WIDTH - VECTOR_SIZE_LOG2;
-    localparam COL_CNT_LO    = VECTOR_SIZE_LOG2;
-    localparam COL_CNT_HI    = CNT_WIDTH - 1;
-    
-    // Number of input cells
-    reg numCellsR;
+    localparam FILT_COL_CNT_WIDTH = CNT_WIDTH - VECTOR_SIZE_LOG2;
+    localparam FILT_COL_CNT_LO    = VECTOR_SIZE_LOG2;
+    localparam FILT_COL_CNT_HI    = CNT_WIDTH;
     
     // FSM registers
-    reg [1:0] stateR;
+    reg stateR;
     reg validR;
     
     reg [VECTOR_SIZE_LOG2-1:0] lastRdCntR;
-    reg [COL_CNT_WIDTH-1:0] maxColCntR;
-    reg [CNT_WIDTH-1:0] maxRowCntR;
-    reg [CNT_WIDTH-1:0] maxBaseCntR;
     
-    // Column Index Counter
-    wire colAdv;
-    wire colClr;
-    wire colDoneR;
-    wire [COL_CNT_WIDTH-1:0] colCntR;
+    reg [FILT_COL_CNT_WIDTH-1:0] maxFiltColCntR;
+    reg [CNT_WIDTH-1:0] maxFiltRowCntR;
+    reg [CNT_WIDTH-1:0] maxDataColCntR;
+    reg [CNT_WIDTH-1:0] maxDataRowCntR;
     
-    // Row Index Counter
-    wire rowAdv;
-    wire rowClr;
-    wire rowDoneR;
-    wire [CNT_WIDTH-1:0] rowCntR;
+    reg [FILT_COL_CNT_WIDTH:0] filtColsR;
+    reg [CNT_WIDTH:0] dataColsR;
     
-    // Base Address Counter
-    wire baseAdv;
-    wire baseClr;
-    wire baseDoneR;
-    wire [CNT_WIDTH-1:0] baseCntR;
+    // Filter Column Counter
+    wire filtColAdv;
+    wire filtColClr;
+    wire filtColDoneR;
+    wire [COL_CNT_WIDTH-1:0] filtColCntR;
+    
+    // Filter Row Counter
+    wire filtRowAdv;
+    wire filtRowClr;
+    wire filtRowDoneR;
+    wire [CNT_WIDTH-1:0] filtRowCntR;
+    
+    // Data Column Counter
+    wire dataColAdv;
+    wire dataColClr;
+    wire dataColDoneR;
+    wire [CNT_WIDTH-1:0] dataColCntR;
+    
+    // Data Row Counter
+    wire dataRowAdv;
+    wire dataRowClr;
+    wire dataRowDoneR;
+    wire [CNT_WIDTH-1:0] dataRowCntR;
     
     // Done signal
     wire done;
-    
-    // Get number of input cells
-    always @(posedge clkIn) begin
-        numCellsR <= dataRowsIn * dataColsIn;
-    end
     
     // Read state machine
     always @(posedge clkIn) begin
@@ -186,25 +188,27 @@ module cnn_hw_accelerator (
             maxColCntR  <= 0;
             maxRowCntR  <= 0;
             maxBaseCntR <= 0;
+            filtColsR   <= 0;
+            dataColsR   <= 0;
         end else begin
             case (stateR)
                 IDLE : begin
-                    maxColCntR  <= filtColsIn[COL_CNT_HI:COL_CNT_LO] - 1;
-                    lastRdCntR  <= filtColsIn[COL_CNT_LO-1:0] - 1;
-                    maxRowCntR  <= filtRowsIn - 1;
+                    lastRdCntR      <= filtColsIn[FILT_COL_CNT_LO-1:0] - 1;
+                    maxFiltColCntR  <= filtColsIn[FILT_COL_CNT_HI:FILT_COL_CNT_LO] - 1;
+                    maxFiltRowCntR  <= filtRowsIn - 1;
+                    maxDataColCntR  <= dataColsIn - 1;
+                    maxDataRowCntR  <= dataRowsIn - 1;
+                    filtColsR       <= filtColsIn[FILT_COL_CNT_HI:FILT_COL_CNT_LO];
+                    dataColsR       <= dataColsIn;
                     if (startIn) begin
-                        stateR  <= INIT;
+                        validR      <= 1;
+                        stateR      <= CALC;
                     end
-                end
-                INIT : begin
-                    maxBaseCntR <= numCellsR - 1;
-                    validR      <= 1;
-                    stateR      <= CALC;
                 end
                 CALC : begin
                     if (done) begin
-                        validR  <= 0;
-                        stateR  <= IDLE;
+                        validR      <= 0;
+                        stateR      <= IDLE;
                     end
                 end
             endcase
@@ -212,50 +216,64 @@ module cnn_hw_accelerator (
     end
     
     // Counter control signals
-    assign baseAdv = colDoneR & rowDoneR & fifoWrReady;
-    assign baseClr = !validR & fifoWrReady;
+    assign dataRowAdv = filtColDoneR & filtRowDoneR & dataColDoneR & fifoWrReady;
+    assign dataRowClr = !validR & fifoWrReady;
     
-    assign rowAdv  = rowDoneR;
-    assign rowClr  = baseClr | baseAdv;
+    assign dataColAdv = filtColDoneR & filtRowDoneR & fifoWrReady;
+    assign dataColClr = dataRowClr | dataRowAdv;
     
-    assign colAdv  = 1;
-    assign colClr  = rowClr | (rowAdv & !rowClr);
+    assign filtRowAdv = filtColDoneR;
+    assign filtRowClr = dataColClr | dataColAdv;
+    
+    assign filtColAdv = 1;
+    assign filtColClr = filtRowClr | (filtRowAdv & !filtRowClr);
        
-    // Column Index Counter
+    // Filter Column Index Counter
     counter #(
-        .CNT_WIDTH(COL_CNT_WIDTH)) col_cnt (
+        .CNT_WIDTH(COL_CNT_WIDTH)) filt_col_cnt (
         .clkIn(clkIn),
         .rstIn(1'b0),
-        .clrIn(colClr),
-        .advIn(colAdv),
-        .endValIn(maxColCntR),
-        .cntOut(colCntR),
-        .doneOut(colDoneR));
+        .clrIn(filtColClr),
+        .advIn(filtColAdv),
+        .endValIn(maxFiltColCntR),
+        .cntOut(filtColCntR),
+        .doneOut(filtColDoneR));
       
-    // Row Index Counter
+    // Filter Row Index Counter
     counter #(
-        .CNT_WIDTH(CNT_WIDTH)) row_cnt (
+        .CNT_WIDTH(CNT_WIDTH)) filt_row_cnt (
         .clkIn(clkIn),
         .rstIn(1'b0),
-        .clrIn(rowClr),
-        .advIn(rowAdv),
-        .endValIn(maxRowCntR),
-        .cntOut(rowCntR),
-        .doneOut(rowDoneR));
+        .clrIn(filtRowClr),
+        .advIn(filtRowAdv),
+        .endValIn(maxFiltRowCntR),
+        .cntOut(filtRowCntR),
+        .doneOut(filtRowDoneR));
         
-    // Base Address Counter
+    // Data Column Index Counter
     counter #(
-        .CNT_WIDTH(CNT_WIDTH)) base_cnt (
+        .CNT_WIDTH(CNT_WIDTH)) data_col_cnt (
         .clkIn(clkIn),
         .rstIn(1'b0),
-        .clrIn(baseClr),
-        .advIn(baseAdv),
-        .endValIn(maxAddrR),
-        .cntOut(baseCntR),
-        .doneOut(baseDoneR));
+        .clrIn(dataColClr),
+        .advIn(dataColAdv),
+        .endValIn(maxDataColCntR),
+        .cntOut(dataColCntR),
+        .doneOut(dataColDoneR));
     
+    // Data Row Index Counter
+    counter #(
+        .CNT_WIDTH(CNT_WIDTH)) data_row_cnt (
+        .clkIn(clkIn),
+        .rstIn(1'b0),
+        .clrIn(dataRowClr),
+        .advIn(dataRowAdv),
+        .endValIn(maxDataRowCntR),
+        .cntOut(dataRowCntR),
+        .doneOut(dataRowDoneR));
+        
     // Done signal for 2D Convolution 
-    assign done = colDoneR & rowDoneR & baseDoneR;
+    assign done = filtColDoneR & filtRowDoneR & dataColDoneR & dataRowDoneR;
     
     // Pipeline #2
     reg last2R;
@@ -288,15 +306,16 @@ module cnn_hw_accelerator (
     always @(posedge clkIn) begin
     
         // Pipeline #2
-        last2R   <= colDoneR & rowDoneR;
-        addr2R   <= {colCntR, {COL_CNT_LO{1'b0}}} * rowCntR;
-        offset2R <= {colCntR, {COL_CNT_LO{1'b0}}} + baseCntR;
-        colCnt2R <= {colCntR, {COL_CNT_LO{1'b0}}};
+        last2R        <= filtColDoneR & filtRowDoneR;
+        dataRowAddr2R <= dataRowCntR * dataColsR;
+        filtRowAddr2R <= filtRowCntR * filtColsR;
+        dataColAddr2R <= dataColCntR;
+        filtColAddr2R <= {filtColCntR, {FILT_COL_CNT_LO{1'b0}}};
         
         // Pipeline #3
         last3R      <= last2R;
-        dataAddr3R  <= addr2R + offset2R;
-        filtAddr3R  <= addr2R + colCnt2R;
+        dataAddr3R  <= dataRowAddr2R + dataColAddr2R;
+        filtAddr3R  <= filtRowAddr2R + filtColAddr2R;
         
         // Pipeline #4
         last4R      <= last3R;
@@ -326,6 +345,7 @@ module cnn_hw_accelerator (
     
     // Pipeline #2
     reg [VECTOR_SIZE-1:0] rdEn2R;
+    reg valid2R;
     
     // Pipeline #3
     reg [VECTOR_SIZE-1:0] rdEn3R;
@@ -340,6 +360,7 @@ module cnn_hw_accelerator (
     // Read Enable Process
     always @(posedge clkIn) begin
         if (rstIn) begin
+            valid2R     <= 0;
             rdEn2R      <= 0;
             rdEn3R      <= 0;
             rdEn4R      <= 0;
@@ -348,21 +369,27 @@ module cnn_hw_accelerator (
         end else begin
         
             // Pipeline #2
+            valid2R     <= validR & !(rowDoneR & colDoneR & !fifoWrReady);
+            
             // Determine which bits of read enable are high
             for (j = 0; j < VECTOR_SIZE; j = j + 1) begin
                 if (rowDoneR) begin
                     if (j < lastRdCntR) begin
-                        rdEn2R[j] <= validR;
+                        rdEn2R[j] <= 1;
                     end else begin
                         rdEn2R[j] <= 0;
                     end
                 end else begin
-                    rdEn2R[j] <= validR;
+                    rdEn2R[j] <= 1;
                 end
             end
             
             // Pipeline #3
-            rdEn3R      <= rdEn2R;
+            if (valid2R) begin
+                rdEn3R  <= rdEn2R;
+            end else begin
+                rdEn3R  <= 0;
+            end
             
             // Pipeline #4
             rdEn4R      <= rdEn3R;

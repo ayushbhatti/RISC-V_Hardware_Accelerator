@@ -62,7 +62,8 @@ module cnn_hw_accelerator_tb;
     clk_gen #(.CLK_PERIOD(CLK_PERIOD)) clk_gen_i (.clkOut(clk));
     rst_gen #(.RESET_TIME(RESET_TIME)) rst_gen_i (.rstOut(rst));
     
-    file_driver data_driver(
+    file_driver #(
+        .FILE_NAME("data.txt")) data_driver(
         .clkIn(clk),
         .rstIn(rst),
         .readyIn(dataReadyR),
@@ -70,7 +71,8 @@ module cnn_hw_accelerator_tb;
         .validOut(dataValid),
         .lastOut(dataLast));
         
-    file_driver filt_driver(
+    file_driver #(
+        .FILE_NAME("filt.txt")) filt_driver(
         .clkIn(clk),
         .rstIn(rst),
         .readyIn(filtReadyR),
