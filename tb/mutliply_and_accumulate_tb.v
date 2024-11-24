@@ -28,6 +28,7 @@ module multiply_and_accumulate_tb;
         .DATA_WIDTH(DATA_WIDTH)) driver_a (
         .clkIn(clk),
         .rstIn(rst),
+        .readyIn(1'b1),
         .dataOut(dataA),
         .validOut(valid),
         .lastOut(last));
@@ -38,6 +39,7 @@ module multiply_and_accumulate_tb;
         .DATA_WIDTH(DATA_WIDTH)) driver_b (
         .clkIn(clk),
         .rstIn(rst),
+        .readyIn(1'b1),
         .dataOut(dataB),
         .validOut(valid),
         .lastOut(last));
