@@ -78,7 +78,7 @@ module cnn_hw_accelerator (
         localparam ADDR_HI      = RAM_ADDR_WIDTH + ADDR_LO;
 
         // Constant for selecting write select bits
-        localparam WR_SEL_LO    = RAM_WE_WIDTH;
+        localparam WR_SEL_LO    = $clog2(RAM_WE_WIDTH);
         localparam WR_SEL_HI    = WR_SEL_LO + VECTOR_SIZE - 1;
         
         // Constants for mapping write enable bits
@@ -197,8 +197,8 @@ module cnn_hw_accelerator (
                     lastRdCntR      <= filtColsIn[FILT_COL_CNT_LO-1:0] - 1;
                     maxFiltColCntR  <= filtColsIn[FILT_COL_CNT_HI:FILT_COL_CNT_LO] - 1;
                     maxFiltRowCntR  <= filtRowsIn - 1;
-                    maxDataColCntR  <= dataColsIn - 1;
-                    maxDataRowCntR  <= dataRowsIn - 1;
+                    maxDataColCntR  <= dataColsIn - filtColsIn;
+                    maxDataRowCntR  <= dataRowsIn - filtRowsIn;
                     filtColsR       <= filtColsIn[FILT_COL_CNT_HI:FILT_COL_CNT_LO];
                     dataColsR       <= dataColsIn;
                     if (startIn) begin
@@ -394,7 +394,7 @@ module cnn_hw_accelerator (
             // Determine which bits of read enable are high
             for (j = 0; j < VECTOR_SIZE; j = j + 1) begin
                 if (filtColDoneR) begin
-                    if (j < lastRdCntR) begin
+                    if (j <= lastRdCntR) begin
                         rdEn2R[j] <= 1;
                     end else begin
                         rdEn2R[j] <= 0;

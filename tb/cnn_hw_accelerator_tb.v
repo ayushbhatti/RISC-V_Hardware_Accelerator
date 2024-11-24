@@ -18,6 +18,8 @@ module cnn_hw_accelerator_tb;
     localparam NUM_WORDS     = BUS_DATA_WIDTH/DATA_WIDTH;
     localparam CNT_WIDTH     = $clog2(NUM_WORDS);
     localparam DIM_WIDTH     = $clog2(MAX_SIZE) + 1;
+    localparam DATA_ADDR     = 0;
+    localparam FILT_ADDR     = 1 << (CNT_WIDTH + WE_WIDTH);
     
     // State Enumerations
     localparam IDLE  = 0;
@@ -54,6 +56,7 @@ module cnn_hw_accelerator_tb;
     reg [BUS_ADDR_WIDTH-1:0] addrR;
     
     reg [CNT_WIDTH-1:0] cntR;
+    reg firstR;
     
     wire resValid;
     wire resData;
@@ -81,8 +84,8 @@ module cnn_hw_accelerator_tb;
         .lastOut(filtLast));
         
     integer i;
-    always @(posedge clkIn) begin
-        if (rstIn) begin
+    always @(posedge clk) begin
+        if (rst) begin
             stateR      <= IDLE;
             dataReadyR  <= 0;
             filtReadyR  <= 0;
@@ -95,6 +98,7 @@ module cnn_hw_accelerator_tb;
             wrEnR       <= 0;
             wrDataR     <= 0;
             cntR        <= 0;
+            firstR      <= 0;
         end else begin
             startR      <= 0;
             wrEnR       <= 0;
@@ -111,20 +115,22 @@ module cnn_hw_accelerator_tb;
                 end
                 DROWS : begin
                     cntR            <= 0;
-                    addrR           <= 0;
+                    addrR           <= DATA_ADDR;
+                    firstR          <= 1;
                     dataRowsR       <= data;
                     stateR          <= DLOAD;
                 end
                 DLOAD : begin
                     cntR            <= cntR + 1;
+                    wrDataR[cntR*DATA_WIDTH+:DATA_WIDTH] <= data;
                     for (i = 0; i < NUM_WORDS; i = i + 1) begin
-                        if (i == 0) begin
-                            wrDataR[i]  <= data;
-                        end else begin
-                            wrDataR[i]  <= wrDataR[i-1];
-                        end
                         if ((cntR == (NUM_WORDS - 1)) || dataLast) begin
-                            addrR       <= addrR + 1;
+                            cntR        <= 0;
+                            if (firstR) begin
+                                firstR  <= 0;
+                            end else begin
+                                addrR   <= addrR + BUS_WE_WIDTH;
+                            end
                             if (cntR >= i) begin
                                 wrEnR[i*WE_WIDTH+:WE_WIDTH] <= {WE_WIDTH{1'b1}};
                             end
@@ -133,7 +139,7 @@ module cnn_hw_accelerator_tb;
                     if (dataLast) begin
                         dataReadyR  <= 0;
                         filtReadyR  <= 1;
-                        stateR      <= FROWS;
+                        stateR      <= FCOLS;
                     end
                 end
                 FCOLS : begin
@@ -144,20 +150,22 @@ module cnn_hw_accelerator_tb;
                 end
                 FROWS : begin
                     cntR            <= 0;
-                    addrR           <= 1 << CNT_WIDTH;
+                    firstR          <= 1;
+                    addrR           <= FILT_ADDR;
                     filtRowsR       <= filt;
                     stateR          <= FLOAD;
                 end
                 FLOAD : begin
                     cntR            <= cntR + 1;
+                    wrDataR[cntR*DATA_WIDTH+:DATA_WIDTH] <= data;
                     for (i = 0; i < NUM_WORDS; i = i + 1) begin
-                        if (i == 0) begin
-                            wrDataR[i]  <= filt;
-                        end else begin
-                            wrDataR[i]  <= wrDataR[i-1];
-                        end
                         if ((cntR == (NUM_WORDS - 1)) || filtLast) begin
-                            addrR       <= addrR + 1;
+                            cntR        <= 0;
+                            if (firstR) begin
+                                firstR  <= 0;
+                            end else begin
+                                addrR   <= addrR + BUS_WE_WIDTH;
+                            end
                             if (cntR >= i) begin
                                 wrEnR[i*WE_WIDTH+:WE_WIDTH] <= {WE_WIDTH{1'b1}};
                             end
@@ -178,8 +186,8 @@ module cnn_hw_accelerator_tb;
         .BUS_DATA_WIDTH(BUS_DATA_WIDTH),
         .VECTOR_SIZE(VECTOR_SIZE),
         .MAX_SIZE(MAX_SIZE)) accel (
-        .clkIn(clkIn),
-        .rstIn(rstIn),
+        .clkIn(clk),
+        .rstIn(rst),
         .startIn(startR),
         .filtRowsIn(filtRowsR),
         .filtColsIn(filtColsR),
