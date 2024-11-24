@@ -140,7 +140,7 @@ module cnn_hw_accelerator (
     
     // Counter control signals
     assign baseAdv = rowDoneR & colDoneR & fifoWrReady;
-    assign baseClr = cntClrR & fifoWrReady;
+    assign baseClr = !validR & fifoWrReady;
     
     assign colAdv  = rowDoneR;
     assign colClr  = baseClr | baseAdv;
@@ -187,6 +187,7 @@ module cnn_hw_accelerator (
     always @(posedge clkIn) begin
         if (rstIn) begin
             stateR  <= IDLE;
+            validR  <= 0;
         end else begin
             case (stateR)
                 IDLE : begin
@@ -200,10 +201,12 @@ module cnn_hw_accelerator (
                 end
                 INIT : begin
                     maxBaseCntR <= numCellsR - 1;
+                    validR      <= 1;
                     stateR      <= CALC;
                 end
                 CALC : begin
                     if (done) begin
+                        validR  <= 0;
                         stateR  <= IDLE;
                     end
                 end
@@ -211,32 +214,7 @@ module cnn_hw_accelerator (
         end
     end
     
-    always @(posedge clkIn) begin
-        if (rstIn) begin
-            rdEn2R  <= 0;
-        end else begin
-            for (i = 0; i < VECTOR_SIZE; i = i + 1) begin
-                if (rowDoneR) begin
-                    if (i < lastRowCntR) begin
-                        rdEn2R[i] <= 1;
-                    end else begin
-                        rdEn2R[i] <= 0;
-                    end
-                end else begin
-                    rdEn2R[i] <= 1;
-                end
-            end
-        end
-    end
-    
-    delay #(
-        .LATENCY(2),
-        .DATA_WIDTH(VECTOR_SIZE)) rden_delay (
-        .clkIn(clkIn),
-        .rstIn(rstIn),
-        .dataIn(rdEn2R),
-        .dataOut(rdEn4R));
-    
+    // Data Process
     always @(posedge clkIn) begin
     
         // Pipeline #2
@@ -265,15 +243,46 @@ module cnn_hw_accelerator (
         filtAddr5R <= (filtAddr4R << (filtShift4R*RAM_ADDR_WIDTH)) | (filtAddr4R >> ((VECTOR_SIZE - filtShift4R)*RAM_ADDR_WIDTH));
     end
     
-    // Determine read enable signals
+    reg [VECTOR_SIZE-1:0] rdEn2R;
+    reg [VECTOR_SIZE-1:0] rdEn3R;
+    reg [VECTOR_SIZE-1:0] rdEn4R;
+    reg [VECTOR_SIZE-1:0] dataRdEn5R;
+    reg [VECTOR_SIZE-1:0] filtRdEn5R;
+    
+    // Read Enable Process
     always @(posedge clkIn) begin
         if (rstIn) begin
-            dataRdEn5R <= 0;
-            filtRdEn5R <= 0;
+            rdEn2R      <= 0;
+            rdEn3R      <= 0;
+            rdEn4R      <= 0;
+            dataRdEn5R  <= 0;
+            filtRdEn5R  <= 0;
         end else begin
+        
+            // Pipeline #2
+            // Determine which bits of read enable are high
+            for (i = 0; i < VECTOR_SIZE; i = i + 1) begin
+                if (rowDoneR) begin
+                    if (i < lastRowCntR) begin
+                        rdEn2R[i] <= validR;
+                    end else begin
+                        rdEn2R[i] <= 0;
+                    end
+                end else begin
+                    rdEn2R[i] <= validR;
+                end
+            end
+            
+            // Pipeline #3
+            rdEn3R      <= rdEn2R;
+            
+            // Pipeline #4
+            rdEn4R      <= rdEn3R;
+            
+            // Pipeline #5
             // Circular shift
-            dataRdEn5R <= (rdEn4R << dataShift4R) | (rdEn4R >> (VECTOR_SIZE - dataShift4R));
-            filtRdEn5R <= (rdEn4R << filtShift4R) | (rdEn4R >> (VECTOR_SIZE - filtShift4R));
+            dataRdEn5R  <= (rdEn4R << dataShift4R) | (rdEn4R >> (VECTOR_SIZE - dataShift4R));
+            filtRdEn5R  <= (rdEn4R << filtShift4R) | (rdEn4R >> (VECTOR_SIZE - filtShift4R));
         end
     end
     
