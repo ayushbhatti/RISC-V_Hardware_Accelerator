@@ -21,6 +21,13 @@ function Y = conv2d(X,H)
         xVec = X(rowIdx:(rowIdx+size(H,1)-1), colIdx:(colIdx+size(H,2)-1)).';
         hVec = H.';
 
+        % Add zeros to fill vector units
+        if mod(size(xVec,1),8) ~= 0
+            padSize = 8 - mod(size(xVec,1),8);
+            xVec = [xVec; zeros(padSize, size(xVec,2), 'single')];
+            hVec = [hVec; zeros(padSize, size(hVec,2), 'single')];
+        end
+
         % Perform multiply and accumulate operation
         Y(i) = multiply_and_accumulate(xVec(:),hVec(:));
     end
