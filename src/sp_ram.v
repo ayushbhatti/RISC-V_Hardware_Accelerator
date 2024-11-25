@@ -29,27 +29,33 @@ module sp_ram (
     output rdAckOut;
     
     
-    reg [ RAM_WIDTH-1:0] ram [0:(RAM_DEPTH-1)];
+    reg [RAM_WIDTH-1:0] ram [0:(RAM_DEPTH-1)];
 
     reg rdAckR;
-    reg [DATA_WIDTH-1:0] rdDataR;
+    reg [RAM_WIDTH-1:0] rdDataR;
 
     wire [RAM_WIDTH-1:0] wrDataPad;
     
     assign wrDataPad = {{PAD_WIDTH{1'b0}}, wrDataIn};
-
-    integer i;
     
     always @(posedge clkIn) begin
-        rdDataR <= ram[addrIn][DATA_WIDTH-1:0];
-        for (i=0; i < WREN_WIDTH; i = i + 1) begin
-            if (wrEnIn[i]) begin
-                ram[addrIn][(8*i)+:8] = wrDataPad[(8*i)+:8];
+        rdDataR <= ram[addrIn];
+    end
+        
+    generate
+    genvar i;
+        for (i = 0; i < WREN_WIDTH; i = i + 1) begin
+            always @(posedge clkIn) begin
+                if (wrEnIn[i]) begin
+                    ram[addrIn][(8*i)+:8] = wrDataPad[(8*i)+:8];
+                end
             end
         end
-    end
-
-    always @(posedge clkIn or posedge rstIn) begin
+    endgenerate
+    
+    
+        
+    always @(posedge clkIn) begin
         if (rstIn) begin
             rdAckR  <= 0;
         end else begin
@@ -57,7 +63,7 @@ module sp_ram (
         end
     end
 
-    assign rdDataOut = rdDataR;
+    assign rdDataOut = rdDataR[DATA_WIDTH-1:0];
     assign rdAckOut  = rdAckR;
 
 endmodule
