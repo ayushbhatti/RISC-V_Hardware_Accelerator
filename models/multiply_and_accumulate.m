@@ -26,7 +26,7 @@ function res = multiply_and_accumulate(a,b)
     stageInput = prod;
     numStages = log2(size(a,1));
     for i = 1:numStages
-        stageOutput = zeros(size(stageInput));
+        stageOutput = zeros(size(stageInput),'single');
         stageOutput(1:(size(stageOutput,1)/2),:) = ...
             stageInput(1:2:end,:) + stageInput(2:2:end,:);
         stageInput = stageOutput;
