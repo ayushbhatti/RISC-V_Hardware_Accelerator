@@ -25,22 +25,18 @@ module counter (
         
     always @(posedge clkIn) begin
         if (rstIn) begin
-            doneR   <= 0;
-            cntR    <= 0;
+            doneR       <= 0;
+            cntR        <= 0;
         end else begin
             if (clrIn) begin
-                cntR        <= 0;
-                doneR       <= 0;
-                if (endValIn == 0) begin
-                    doneR   <= 1;
-                end
-            end else if (advIn && (cntR != endValIn)) begin
-                nextCntVar   =  cntR + 1;
-                if (nextCntVar == endValIn) begin
-                    doneR   <= 1;
-                end
-                cntR        <= nextCntVar;
-            end            
+                nextCntVar  = 0;
+            end else if (advIn && !doneR) begin
+                nextCntVar  = cntR + 1;
+            end
+            cntR        <= nextCntVar;
+            if (nextCntVar == endValIn) begin
+                doneR   <= 1;
+            end
         end
     end
     
