@@ -36,6 +36,8 @@ module counter (
             cntR        <= nextCntVar;
             if (nextCntVar == endValIn) begin
                 doneR   <= 1;
+            end else begin
+                doneR   <= 0;
             end
         end
     end

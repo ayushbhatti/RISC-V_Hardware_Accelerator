@@ -26,7 +26,7 @@ function res = multiply_and_accumulate(a,b)
     stageInput = prod;
     numStages = log2(size(a,1));
     for i = 1:numStages
-        stageOutput = zeros(size(stageInput));
+        stageOutput = zeros(size(stageInput),'single');
         stageOutput(1:(size(stageOutput,1)/2),:) = ...
             stageInput(1:2:end,:) + stageInput(2:2:end,:);
         stageInput = stageOutput;
@@ -34,7 +34,7 @@ function res = multiply_and_accumulate(a,b)
     adderTreeOutput = stageOutput(1,:);
 
     % Accumulator
-    addLatency = 13;
+    addLatency = 14;
     if mod(length(adderTreeOutput), addLatency) == 0
         padSize = 0;
     else
@@ -43,6 +43,10 @@ function res = multiply_and_accumulate(a,b)
     adderTreeOutput = [adderTreeOutput, zeros(1,padSize,'single')];
     adderTreeOutput = reshape(adderTreeOutput,addLatency,[]);
     accumOutput = sum(adderTreeOutput,2);
+
+    % Circular shift to get correct ordering of operands
+    % First padded sample is the first input to the adder
+    accumOutput = circshift(accumOutput, padSize);
 
     % Adder Tree
     numStages = ceil(log2(size(accumOutput,1)));

@@ -147,12 +147,13 @@ module cnn_hw_accelerator (
     
     reg [VECTOR_SIZE_LOG2-1:0] lastRdCntR;
     
+    reg [CNT_WIDTH-1:0] maxFiltColCntVar;
     reg [FILT_COL_CNT_WIDTH-1:0] maxFiltColCntR;
     reg [CNT_WIDTH-1:0] maxFiltRowCntR;
     reg [CNT_WIDTH-1:0] maxDataColCntR;
     reg [CNT_WIDTH-1:0] maxDataRowCntR;
     
-    reg [FILT_COL_CNT_WIDTH:0] filtColsR;
+    reg [CNT_WIDTH:0] filtColsR;
     reg [CNT_WIDTH:0] dataColsR;
     
     // Filter Column Counter
@@ -197,12 +198,13 @@ module cnn_hw_accelerator (
         end else begin
             case (stateR)
                 IDLE : begin
-                    lastRdCntR      <= filtColsIn[FILT_COL_CNT_LO-1:0] - 1;
-                    maxFiltColCntR  <= filtColsIn[FILT_COL_CNT_HI:FILT_COL_CNT_LO] - 1;
+                    maxFiltColCntVar = filtColsIn - 1;
+                    lastRdCntR      <= maxFiltColCntVar[FILT_COL_CNT_LO-1:0];
+                    maxFiltColCntR  <= maxFiltColCntVar[FILT_COL_CNT_HI:FILT_COL_CNT_LO];
                     maxFiltRowCntR  <= filtRowsIn - 1;
                     maxDataColCntR  <= dataColsIn - filtColsIn;
                     maxDataRowCntR  <= dataRowsIn - filtRowsIn;
-                    filtColsR       <= filtColsIn[FILT_COL_CNT_HI:FILT_COL_CNT_LO];
+                    filtColsR       <= filtColsIn;
                     dataColsR       <= dataColsIn;
                     if (startIn) begin
                         validR      <= 1;

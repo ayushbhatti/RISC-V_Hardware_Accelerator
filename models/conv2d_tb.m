@@ -1,4 +1,5 @@
 N = 32;
+rng(0);
 X = randn(N, N, 'single');
 H = randn(1, N, 'Single');
 Y = conv2d(X,H);
